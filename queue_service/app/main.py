@@ -73,25 +73,8 @@ async def log_middleware(request: Request, call_next):
     response = await call_next(request)
     process_time = time.time() - start_time
     
-    # Read and log the response body
-    response_body = None
-    response_body_bytes = b""
-    
-    # Get the original response body
-    original_body = response.body
-    
-    # Try to parse the response body
-    try:
-        if original_body:
-            response_body = json.loads(original_body)
-    except:
-        # If we can't parse the body as JSON, use the raw body
-        try:
-            response_body = original_body.decode("utf-8")
-        except:
-            response_body = "Could not decode response body"
-    
-    # Log the response
+    # Log the response without trying to access the body
+    # As some response types (like StreamingResponse) don't have a body attribute
     log_request_response(
         source=f"{request.url.path}",
         destination=client_host,
@@ -101,7 +84,7 @@ async def log_middleware(request: Request, call_next):
             "process_time_ms": round(process_time * 1000),
             "request_id": request_id
         },
-        body=response_body
+        body="Response body not logged for this response type"
     )
     
     return response
