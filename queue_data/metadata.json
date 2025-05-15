@@ -1,0 +1,9 @@
+{
+  "Queue1": {
+    "message_count": 0,
+    "created_at": "2025-05-15T07:14:16.528181",
+    "last_modified": "2025-05-15T13:58:17.725427",
+    "max_messages": 100,
+    "persist_interval_seconds": 30
+  }
+}

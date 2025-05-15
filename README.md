@@ -55,6 +55,12 @@ docker-compose up -d
 docker-compose logs -f
 ```
 
+```bash
+# In the assignment 3 directory
+docker-compose up --build
+Then open http://localhost:7500 in your browser to access the web UI.
+````
+
 ### Manual Setup
 
 ```bash
@@ -106,7 +112,7 @@ The service can be configured through the `config.json` file or environment vari
     "persist_interval_seconds": 60,
     "storage_path": "./queue_data",
     "port": 7500,
-    "host": "0.0.0.0",
+    "host": "localhost",
     "log_level": "INFO",
     "jwt_secret_key": "your-secret-key-change-in-production",
     "jwt_algorithm": "HS256",
