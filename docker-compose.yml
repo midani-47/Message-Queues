@@ -1,5 +1,4 @@
-version: '3'
-
+# Using modern compose specification
 services:
   queue_service:
     build:

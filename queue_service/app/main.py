@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException, Depends, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
 from typing import Dict, Any, Optional, List
 import uvicorn
@@ -22,11 +24,26 @@ from .logger import logger, log_request_response
 from .config import config
 
 
+# Lifespan context manager (modern FastAPI approach)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("Queue Service starting up...")
+    # Log configuration
+    logger.info(f"Using configuration: {config.get_all()}")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Queue Service shutting down...")
+    queue_manager.persist_all()
+
 # Create FastAPI application
 app = FastAPI(
     title="Queue Service",
     description="Message queue service for high performance computing tasks",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Add CORS middleware
@@ -97,7 +114,8 @@ def handle_shutdown(sig, frame):
     logger.info("Received shutdown signal, persisting queue data...")
     queue_manager.persist_all()
     logger.info("Queue data persisted, shutting down...")
-    sys.exit(0)
+    # Don't call sys.exit() as it triggers SystemExit exceptions
+    # Let the application terminate naturally
 
 
 # Register signal handlers
@@ -105,11 +123,26 @@ signal.signal(signal.SIGINT, handle_shutdown)
 signal.signal(signal.SIGTERM, handle_shutdown)
 
 
+# Set up templates
+templates = Jinja2Templates(directory="app/templates")
+
 # Health check endpoint
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "timestamp": time.time()}
+
+# Web UI
+@app.get("/", response_class=HTMLResponse, tags=["UI"])
+async def get_ui(request: Request):
+    """Serve the web UI"""
+    return templates.TemplateResponse("index.html", {"request": request})
+
+# Current user endpoint for UI
+@app.get("/current-user", tags=["Authentication"])
+async def get_current_user(token_data: TokenData = Depends(get_current_user)):
+    """Get information about the current user"""
+    return {"username": token_data.username, "role": token_data.role}
 
 
 # Authentication endpoints
@@ -337,22 +370,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     )
 
 
-# Startup event
-@app.on_event("startup")
-async def startup_event():
-    """Executed when the application starts"""
-    logger.info("Queue Service starting up...")
-    
-    # Log configuration
-    logger.info(f"Using configuration: {config.get_all()}")
-
-
-# Shutdown event
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Executed when the application shuts down"""
-    logger.info("Queue Service shutting down...")
-    queue_manager.persist_all()
+# Note: The startup and shutdown events are now handled by the lifespan context manager above
 
 
 # Run the server if executed directly

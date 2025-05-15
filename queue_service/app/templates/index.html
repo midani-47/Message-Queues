@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Queue Service Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 20px;
+            padding-bottom: 40px;
+        }
+        .queue-card {
+            margin-bottom: 20px;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .message-card {
+            margin-bottom: 10px;
+        }
+        .status-message {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">Queue Service Dashboard</h1>
+        
+        <!-- Authentication Panel -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Authentication</h5>
+            </div>
+            <div class="card-body">
+                <form id="login-form">
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <input type="text" class="form-control" id="username" placeholder="Username" required>
+                        </div>
+                        <div class="col-md-4">
+                            <input type="password" class="form-control" id="password" placeholder="Password" required>
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-primary w-100">Login</button>
+                        </div>
+                    </div>
+                </form>
+                <div id="auth-status"></div>
+                <div class="mt-3">
+                    <small class="text-muted">Available test users: 
+                        <code>admin/admin_password</code> (admin), 
+                        <code>agent/agent_password</code> (agent), 
+                        <code>user/user_password</code> (user)
+                    </small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Queue Management Panel -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">Queue Management</h5>
+            </div>
+            <div class="card-body">
+                <h6>Create New Queue (Admin only)</h6>
+                <form id="create-queue-form" class="mb-4">
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <input type="text" class="form-control" id="queue-name" placeholder="Queue Name" required>
+                        </div>
+                        <div class="col-md-4">
+                            <input type="number" class="form-control" id="max-messages" placeholder="Max Messages" value="100">
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-success w-100">Create Queue</button>
+                        </div>
+                    </div>
+                </form>
+                
+                <h6>Available Queues</h6>
+                <div class="row">
+                    <div class="col-md-8 mb-3">
+                        <button id="refresh-queues" class="btn btn-outline-secondary">Refresh Queues</button>
+                        <div id="queue-status" class="mt-2"></div>
+                    </div>
+                </div>
+                <div id="queues-container" class="row">
+                    <!-- Queue cards will be added here dynamically -->
+                    <div class="col-12">
+                        <p class="text-muted">No queues found. Create one or login to see queues.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Message Operations Panel -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Message Operations</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <h6>Push Message (Agent/Admin only)</h6>
+                        <form id="push-form">
+                            <div class="mb-3">
+                                <select class="form-select" id="push-queue">
+                                    <option value="">Select Queue</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <textarea class="form-control" id="message-content" rows="5" placeholder='{"customer": "test", "vendor_id": "123", "amount": 100}'></textarea>
+                                <small class="text-muted">Enter a valid JSON object</small>
+                            </div>
+                            <button type="submit" class="btn btn-info">Push Message</button>
+                        </form>
+                        <div id="push-status" class="mt-2"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Pull Message (Agent/Admin only)</h6>
+                        <form id="pull-form">
+                            <div class="mb-3">
+                                <select class="form-select" id="pull-queue">
+                                    <option value="">Select Queue</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-info">Pull Message</button>
+                        </form>
+                        <div id="pull-status" class="mt-2"></div>
+                        <div id="pulled-message" class="mt-3">
+                            <pre id="message-display" style="display: none;"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Global variables
+        let token = '';
+        let userRole = '';
+        const baseUrl = window.location.origin;
+
+        // Utility functions
+        function showMessage(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="alert alert-${isError ? 'danger' : 'success'}">${message}</div>`;
+            setTimeout(() => {
+                element.innerHTML = '';
+            }, 5000);
+        }
+
+        async function fetchWithAuth(url, options = {}) {
+            if (!options.headers) {
+                options.headers = {};
+            }
+            if (token) {
+                options.headers['Authorization'] = `Bearer ${token}`;
+            }
+            try {
+                const response = await fetch(url, options);
+                if (response.status === 401) {
+                    showMessage('auth-status', 'Authentication failed. Please login again.', true);
+                    token = '';
+                    return null;
+                }
+                return response;
+            } catch (error) {
+                console.error('Fetch error:', error);
+                return null;
+            }
+        }
+
+        // Authentication
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${baseUrl}/token?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    token = data.access_token;
+                    
+                    // Get user role
+                    const userResponse = await fetchWithAuth(`${baseUrl}/current-user`);
+                    if (userResponse && userResponse.ok) {
+                        const userData = await userResponse.json();
+                        userRole = userData.role;
+                        showMessage('auth-status', `Logged in as ${username} (${userRole})`);
+                        refreshQueues();
+                        updateUIForRole();
+                    }
+                } else {
+                    const errorData = await response.json();
+                    showMessage('auth-status', `Login failed: ${errorData.detail}`, true);
+                }
+            } catch (error) {
+                showMessage('auth-status', `Error: ${error.message}`, true);
+            }
+        });
+
+        // Update UI based on user role
+        function updateUIForRole() {
+            const createQueueForm = document.getElementById('create-queue-form');
+            const pushForm = document.getElementById('push-form');
+            const pullForm = document.getElementById('pull-form');
+            
+            if (userRole === 'admin') {
+                createQueueForm.style.display = 'block';
+                pushForm.style.display = 'block';
+                pullForm.style.display = 'block';
+            } else if (userRole === 'agent') {
+                createQueueForm.style.display = 'none';
+                pushForm.style.display = 'block';
+                pullForm.style.display = 'block';
+            } else {
+                createQueueForm.style.display = 'none';
+                pushForm.style.display = 'none';
+                pullForm.style.display = 'none';
+            }
+        }
+
+        // Queue Operations
+        document.getElementById('refresh-queues').addEventListener('click', refreshQueues);
+        
+        async function refreshQueues() {
+            if (!token) {
+                showMessage('queue-status', 'Please login first', true);
+                return;
+            }
+            
+            const response = await fetchWithAuth(`${baseUrl}/queues`);
+            if (response && response.ok) {
+                const data = await response.json();
+                const queuesContainer = document.getElementById('queues-container');
+                const pushQueueSelect = document.getElementById('push-queue');
+                const pullQueueSelect = document.getElementById('pull-queue');
+                
+                // Clear previous content
+                queuesContainer.innerHTML = '';
+                pushQueueSelect.innerHTML = '<option value="">Select Queue</option>';
+                pullQueueSelect.innerHTML = '<option value="">Select Queue</option>';
+                
+                if (data.queues && data.queues.length > 0) {
+                    data.queues.forEach(queue => {
+                        // Add to queue container
+                        const queueCard = document.createElement('div');
+                        queueCard.className = 'col-md-4 queue-card';
+                        queueCard.innerHTML = `
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h6>${queue.name}</h6>
+                                </div>
+                                <div class="card-body">
+                                    <p><strong>Messages:</strong> ${queue.message_count}</p>
+                                    <p><strong>Created:</strong> ${new Date(queue.created_at).toLocaleString()}</p>
+                                    <p><strong>Last Modified:</strong> ${new Date(queue.last_modified).toLocaleString()}</p>
+                                </div>
+                                <div class="card-footer">
+                                    ${userRole === 'admin' ? 
+                                        `<button class="btn btn-sm btn-danger delete-queue" data-queue="${queue.name}">Delete</button>` : ''}
+                                </div>
+                            </div>
+                        `;
+                        queuesContainer.appendChild(queueCard);
+                        
+                        // Add to selects
+                        const pushOption = document.createElement('option');
+                        pushOption.value = queue.name;
+                        pushOption.textContent = queue.name;
+                        pushQueueSelect.appendChild(pushOption);
+                        
+                        const pullOption = document.createElement('option');
+                        pullOption.value = queue.name;
+                        pullOption.textContent = queue.name;
+                        pullQueueSelect.appendChild(pullOption);
+                    });
+                    
+                    // Add event listeners to delete buttons
+                    document.querySelectorAll('.delete-queue').forEach(button => {
+                        button.addEventListener('click', async (e) => {
+                            const queueName = e.target.dataset.queue;
+                            if (confirm(`Are you sure you want to delete queue "${queueName}"?`)) {
+                                await deleteQueue(queueName);
+                            }
+                        });
+                    });
+                } else {
+                    queuesContainer.innerHTML = '<div class="col-12"><p class="text-muted">No queues found.</p></div>';
+                }
+            } else if (response) {
+                const errorData = await response.json();
+                showMessage('queue-status', `Error fetching queues: ${errorData.detail}`, true);
+            }
+        }
+        
+        // Create Queue
+        document.getElementById('create-queue-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (userRole !== 'admin') {
+                showMessage('queue-status', 'Only admins can create queues', true);
+                return;
+            }
+            
+            const queueName = document.getElementById('queue-name').value;
+            const maxMessages = document.getElementById('max-messages').value;
+            
+            const queueData = {
+                name: queueName,
+                config: {
+                    max_messages: parseInt(maxMessages),
+                    persist_interval_seconds: 30
+                }
+            };
+            
+            const response = await fetchWithAuth(`${baseUrl}/queues`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(queueData)
+            });
+            
+            if (response && response.ok) {
+                showMessage('queue-status', `Queue "${queueName}" created successfully`);
+                document.getElementById('queue-name').value = '';
+                refreshQueues();
+            } else if (response) {
+                const errorData = await response.json();
+                showMessage('queue-status', `Error creating queue: ${errorData.detail}`, true);
+            }
+        });
+        
+        // Delete Queue
+        async function deleteQueue(queueName) {
+            if (userRole !== 'admin') {
+                showMessage('queue-status', 'Only admins can delete queues', true);
+                return;
+            }
+            
+            const response = await fetchWithAuth(`${baseUrl}/queues/${queueName}`, {
+                method: 'DELETE'
+            });
+            
+            if (response && response.ok) {
+                showMessage('queue-status', `Queue "${queueName}" deleted successfully`);
+                refreshQueues();
+            } else if (response) {
+                const errorData = await response.json();
+                showMessage('queue-status', `Error deleting queue: ${errorData.detail}`, true);
+            }
+        }
+        
+        // Push Message
+        document.getElementById('push-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (userRole !== 'admin' && userRole !== 'agent') {
+                showMessage('push-status', 'Only admins and agents can push messages', true);
+                return;
+            }
+            
+            const queueName = document.getElementById('push-queue').value;
+            if (!queueName) {
+                showMessage('push-status', 'Please select a queue', true);
+                return;
+            }
+            
+            let messageContent;
+            try {
+                messageContent = JSON.parse(document.getElementById('message-content').value);
+            } catch (error) {
+                showMessage('push-status', 'Invalid JSON: ' + error.message, true);
+                return;
+            }
+            
+            const response = await fetchWithAuth(`${baseUrl}/queues/${queueName}/push`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(messageContent)
+            });
+            
+            if (response && response.ok) {
+                const data = await response.json();
+                showMessage('push-status', `Message pushed to queue "${queueName}" with ID: ${data.message_id}`);
+                refreshQueues();
+            } else if (response) {
+                const errorData = await response.json();
+                showMessage('push-status', `Error pushing message: ${errorData.detail}`, true);
+            }
+        });
+        
+        // Pull Message
+        document.getElementById('pull-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (userRole !== 'admin' && userRole !== 'agent') {
+                showMessage('pull-status', 'Only admins and agents can pull messages', true);
+                return;
+            }
+            
+            const queueName = document.getElementById('pull-queue').value;
+            if (!queueName) {
+                showMessage('pull-status', 'Please select a queue', true);
+                return;
+            }
+            
+            const response = await fetchWithAuth(`${baseUrl}/queues/${queueName}/pull`);
+            
+            if (response) {
+                if (response.status === 204) {
+                    showMessage('pull-status', `Queue "${queueName}" is empty`);
+                    document.getElementById('message-display').style.display = 'none';
+                    return;
+                }
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showMessage('pull-status', `Message pulled successfully from queue "${queueName}"`);
+                    
+                    // Display the message
+                    const messageDisplay = document.getElementById('message-display');
+                    messageDisplay.textContent = JSON.stringify(data, null, 2);
+                    messageDisplay.style.display = 'block';
+                    
+                    refreshQueues();
+                } else {
+                    const errorData = await response.json();
+                    showMessage('pull-status', `Error pulling message: ${errorData.detail}`, true);
+                }
+            }
+        });
+
+        // Initialize UI
+        updateUIForRole();
+    </script>
+</body>
+</html>
