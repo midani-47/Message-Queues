@@ -1,6 +1,15 @@
 # Message Queue Service for HPC Tasks
 
 A high-performance message queue service for computational-intensive tasks, designed as part of a distributed system architecture.
+We have a well-structured FastAPI application with:
+- Docker support with volume persistence
+- A modern lifespan context manager for startup/shutdown
+- Proper CORS middleware
+- Request/response logging middleware
+- Role-based authentication
+- Queue management and message operations endpoints
+- A web UI
+
 
 ## Overview
 
