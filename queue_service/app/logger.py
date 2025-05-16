@@ -79,15 +79,42 @@ def setup_logger():
 logger = setup_logger()
 
 def log_message(queue_name: str, message: Dict, action: str):
-    """Log message operations to queue_service.log"""
-    log_entry = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "queue": queue_name,
-        "action": action,  # "push" or "pull"
-        "message_id": message.get("id"),
-        "message_type": message.get("message_type"),
-        "content": message.get("content")
-    }
+    """Log message operations to queue_service.log in the format from Assignment 2"""
+    # Format timestamp as used in Assignment 2
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Get message content and type
+    message_id = message.get("id", "unknown")
+    message_type = message.get("message_type", "unknown")
+    content = message.get("content", {})
+    
+    # Create log entry based on message type and action
+    if message_type == "transaction":
+        log_entry = {
+            "timestamp": timestamp,
+            "service": "queue_service",
+            "action": action,
+            "queue": queue_name,
+            "message_id": message_id,
+            "transaction_id": content.get("transaction_id", "unknown"),
+            "customer_id": content.get("customer_id", "unknown"),
+            "amount": content.get("amount", 0),
+            "vendor_id": content.get("vendor_id", "unknown")
+        }
+    else:  # prediction
+        log_entry = {
+            "timestamp": timestamp,
+            "service": "queue_service",
+            "action": action,
+            "queue": queue_name,
+            "message_id": message_id,
+            "transaction_id": content.get("transaction_id", "unknown"),
+            "prediction": content.get("prediction", False),
+            "confidence": content.get("confidence", 0.0),
+            "model_version": content.get("model_version", "unknown")
+        }
+    
+    # Log the entry
     logger.info(json.dumps(log_entry))
 
 def log_request_response(

@@ -69,11 +69,18 @@
                 <h6>Create New Queue (Admin only)</h6>
                 <form id="create-queue-form" class="mb-4">
                     <div class="row mb-3">
-                        <div class="col-md-8">
+                        <div class="col-md-6">
                             <input type="text" class="form-control" id="queue-name" placeholder="Queue Name" required>
                             <small class="text-muted">Max messages per queue is set to 5 in the config file</small>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
+                            <select class="form-select" id="queue-type" required>
+                                <option value="transaction">Transaction Queue</option>
+                                <option value="prediction">Prediction Queue</option>
+                            </select>
+                            <small class="text-muted">Queue type cannot be changed after creation</small>
+                        </div>
+                        <div class="col-md-3">
                             <button type="submit" class="btn btn-success w-100">Create Queue</button>
                         </div>
                     </div>
@@ -168,6 +175,7 @@
         // Global variables
         let token = '';
         let userRole = '';
+        let queuesData = [];
         const baseUrl = window.location.origin;
 
         // Utility functions
@@ -238,16 +246,27 @@
             const createQueueForm = document.getElementById('create-queue-form');
             const pushForm = document.getElementById('push-form');
             const pullForm = document.getElementById('pull-form');
+            const messageTypeSelect = document.getElementById('message-type');
             
             if (userRole === 'admin') {
+                // Admins can do everything
                 createQueueForm.style.display = 'block';
                 pushForm.style.display = 'block';
                 pullForm.style.display = 'block';
+                // Enable both message types for admins
+                messageTypeSelect.querySelector('option[value="transaction"]').disabled = false;
+                messageTypeSelect.querySelector('option[value="prediction"]').disabled = false;
             } else if (userRole === 'agent') {
+                // Agents can't create queues
                 createQueueForm.style.display = 'none';
                 pushForm.style.display = 'block';
                 pullForm.style.display = 'block';
+                // Agents can only push prediction messages, not transaction messages
+                messageTypeSelect.querySelector('option[value="transaction"]').disabled = true;
+                messageTypeSelect.querySelector('option[value="prediction"]').disabled = false;
+                messageTypeSelect.value = 'prediction';
             } else {
+                // No other roles supported
                 createQueueForm.style.display = 'none';
                 pushForm.style.display = 'none';
                 pullForm.style.display = 'none';
@@ -266,6 +285,9 @@
             const response = await fetchWithAuth(`${baseUrl}/queues`);
             if (response && response.ok) {
                 const data = await response.json();
+                // Store queues data for client-side validation
+                queuesData = data.queues;
+                
                 const queuesContainer = document.getElementById('queues-container');
                 const pushQueueSelect = document.getElementById('push-queue');
                 const pullQueueSelect = document.getElementById('pull-queue');
@@ -286,6 +308,7 @@
                                     <h6>${queue.name}</h6>
                                 </div>
                                 <div class="card-body">
+                                    <p><strong>Type:</strong> <span class="badge ${queue.queue_type === 'transaction' ? 'bg-primary' : 'bg-success'}">${queue.queue_type}</span></p>
                                     <p><strong>Messages:</strong> ${queue.message_count}</p>
                                     <p><strong>Created:</strong> ${new Date(queue.created_at).toLocaleString()}</p>
                                     <p><strong>Last Modified:</strong> ${new Date(queue.last_modified).toLocaleString()}</p>
@@ -339,11 +362,14 @@
             
             const queueName = document.getElementById('queue-name').value;
             
+            const queueType = document.getElementById('queue-type').value;
+            
             const queueData = {
                 name: queueName,
                 config: {
-                    max_messages: 5,  // Using the default value from the comment
-                    persist_interval_seconds: 30
+                    max_messages: 5,  // Using the default value from the config
+                    persist_interval_seconds: 30,
+                    queue_type: queueType
                 }
             };
             
@@ -438,7 +464,26 @@
                 return;
             }
             
+            // Get the selected queue's type
+            const selectedQueue = queuesData.find(q => q.name === queueName);
+            if (!selectedQueue) {
+                showMessage('push-status', 'Queue not found', true);
+                return;
+            }
+            
             const messageType = document.getElementById('message-type').value;
+            
+            // Check if message type matches queue type
+            if (messageType !== selectedQueue.queue_type) {
+                showMessage('push-status', `Cannot push ${messageType} message to ${selectedQueue.queue_type} queue`, true);
+                return;
+            }
+            
+            // Check role restrictions
+            if (userRole === 'agent' && messageType === 'transaction') {
+                showMessage('push-status', 'Agents can only push prediction messages, not transaction messages', true);
+                return;
+            }
             const messageContent = document.getElementById('message-content').value;
             
             try {

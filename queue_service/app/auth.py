@@ -66,7 +66,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
         # Decode the token
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
-        role: str = payload.get("role", "user")
+        role: str = payload.get("role", "agent")
         
         if username is None:
             logger.warning("Missing username in token")

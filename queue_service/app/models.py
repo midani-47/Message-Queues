@@ -8,7 +8,6 @@ class QueueRole(str, Enum):
     """Roles for queue access control"""
     ADMIN = "admin"
     AGENT = "agent"
-    USER = "user"
 
 
 class MessageBase(BaseModel):
@@ -47,16 +46,24 @@ class Message(MessageBase):
     id: str  # Unique message ID
 
 
+class QueueType(str, Enum):
+    """Types of queues"""
+    TRANSACTION = "transaction"
+    PREDICTION = "prediction"
+
+
 class QueueConfig(BaseModel):
     """Queue configuration model"""
-    max_messages: int = 1000
+    max_messages: int = 5
     persist_interval_seconds: int = 60
+    queue_type: QueueType = QueueType.TRANSACTION
 
 
 class QueueInfo(BaseModel):
     """Queue information model"""
     name: str
     message_count: int
+    queue_type: QueueType
     created_at: datetime
     last_modified: datetime = Field(default_factory=datetime.utcnow)
 

@@ -158,8 +158,7 @@ async def login_for_access_token(username: str, password: str):
     # In a real application, this would validate against a database
     valid_users = {
         "admin": {"password": "admin_password", "role": QueueRole.ADMIN},
-        "agent": {"password": "agent_password", "role": QueueRole.AGENT},
-        "user": {"password": "user_password", "role": QueueRole.USER}
+        "agent": {"password": "agent_password", "role": QueueRole.AGENT}
     }
     
     # Check if user exists and password is correct
@@ -202,13 +201,21 @@ async def create_queue(
     Create a new queue
     
     Only administrators can create queues
+    Queue type must be specified as either 'transaction' or 'prediction'
     
     Args:
-        queue_data: Queue creation data
+        queue_data: Queue creation data with queue_type
         
     Returns:
         Created queue information
     """
+    # Ensure queue config has a queue_type
+    if not queue_data.config or not hasattr(queue_data.config, 'queue_type'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Queue type must be specified (transaction or prediction)"
+        )
+    
     success, message = await queue_manager.create_queue(
         queue_data.name,
         queue_data.config
@@ -296,6 +303,8 @@ async def push_message(
     Push a message to a queue
     
     Only agents and administrators can push messages
+    Agents can only push prediction messages, not transaction messages
+    Messages must match the queue type (transaction or prediction)
     
     Args:
         queue_name: Name of the queue
@@ -305,7 +314,12 @@ async def push_message(
     Returns:
         Success message and message ID
     """
-    success, message_text, message_id = await queue_manager.push_message(queue_name, message, message_type)
+    success, message_text, message_id = await queue_manager.push_message(
+        queue_name=queue_name, 
+        content=message, 
+        message_type=message_type,
+        user_role=token_data.role
+    )
     
     if not success:
         if "does not exist" in message_text:
