@@ -184,7 +184,12 @@ class QueueManager:
         )
         
         # Set configuration
-        self._queue_configs[name] = config or QueueConfig()
+        if config:
+            self._queue_configs[name] = config
+        else:
+            # Use the max_messages_per_queue from the config file
+            max_messages = config.get("max_messages_per_queue", 5)
+            self._queue_configs[name] = QueueConfig(max_messages=max_messages)
         
         logger.info(f"Created queue '{name}'")
         return True, f"Queue '{name}' created successfully"
@@ -232,13 +237,14 @@ class QueueManager:
         """
         return list(self._queue_info.values())
     
-    async def push_message(self, queue_name: str, content: Dict[str, Any]) -> Tuple[bool, str, Optional[str]]:
+    async def push_message(self, queue_name: str, content: Dict[str, Any], message_type: str = "transaction") -> Tuple[bool, str, Optional[str]]:
         """
         Push a message to the queue
         
         Args:
             queue_name: Name of the queue
-            content: Message content
+            content: Message content (either transaction data or prediction result from Assignment 2)
+            message_type: Type of message - either "transaction" or "prediction"
             
         Returns:
             (success, message, message_id)
@@ -246,6 +252,10 @@ class QueueManager:
         # Check if queue exists
         if queue_name not in self._queues:
             return False, f"Queue '{queue_name}' does not exist", None
+        
+        # Validate message type
+        if message_type not in ["transaction", "prediction"]:
+            return False, f"Invalid message type: {message_type}. Must be 'transaction' or 'prediction'", None
         
         async with self._locks[queue_name]:
             # Check queue size limit
@@ -255,13 +265,30 @@ class QueueManager:
             
             # Create and add the message
             message_id = str(uuid.uuid4())
-            message = Message(id=message_id, content=content, timestamp=datetime.utcnow())
+            message = Message(
+                id=message_id, 
+                content=content, 
+                timestamp=datetime.utcnow(),
+                message_type=message_type
+            )
             
             self._queues[queue_name].append(message)
             
             # Update queue metadata
             self._queue_info[queue_name].message_count = len(self._queues[queue_name])
             self._queue_info[queue_name].last_modified = datetime.utcnow()
+        
+        # Log the message push operation
+        from .logger import log_message
+        log_message(
+            queue_name=queue_name,
+            message={
+                "id": message_id,
+                "message_type": message_type,
+                "content": content
+            },
+            action="push"
+        )
         
         logger.info(f"Pushed message {message_id} to queue '{queue_name}'")
         return True, f"Message pushed to queue '{queue_name}'", message_id
@@ -291,6 +318,18 @@ class QueueManager:
             # Update queue metadata
             self._queue_info[queue_name].message_count = len(self._queues[queue_name])
             self._queue_info[queue_name].last_modified = datetime.utcnow()
+        
+        # Log the message pull operation
+        from .logger import log_message
+        log_message(
+            queue_name=queue_name,
+            message={
+                "id": message.id,
+                "message_type": message.message_type,
+                "content": message.content
+            },
+            action="pull"
+        )
         
         logger.info(f"Pulled message {message.id} from queue '{queue_name}'")
         return True, f"Message pulled from queue '{queue_name}'", message

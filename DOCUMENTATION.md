@@ -49,6 +49,39 @@ The Queue Manager is the core component responsible for:
 
 ## Data Models
 
+The service uses Pydantic models for data validation and serialization. Key models include:
+
+### Message Types
+
+The service supports two types of messages as required by the assignment:
+
+1. **Transaction Messages**: Contains transaction data with fields from Assignment 2:
+   ```json
+   {
+     "transaction_id": "string",
+     "customer_id": "string",
+     "customer_name": "string",
+     "amount": "float",
+     "vendor_id": "string",
+     "date": "string",
+     ... other transaction fields
+   }
+   ```
+
+2. **Prediction Result Messages**: Contains prediction results with fields from Assignment 2:
+   ```json
+   {
+     "transaction_id": "string",
+     "prediction": "boolean",  // True for approved, False for rejected
+     "confidence": "float",   // Confidence score of the prediction
+     "model_version": "string",
+     "timestamp": "string",
+     ... other prediction fields
+   }
+   ```
+
+The `MessageBase` model includes a `message_type` field that identifies whether a message contains transaction data or prediction results.
+
 ### Key Models
 
 - **Message**: Represents a message in a queue with content and metadata
@@ -157,6 +190,60 @@ The persistence behavior can be configured with:
 
 ## Logging System
 
+The service implements a comprehensive logging system that records all operations to `queue_service.log` in the root directory. The logging system is designed to match the requirements from Assignment 2.
+
+### Log Format
+
+Logs are stored in structured JSON format for easy parsing and analysis. There are two main types of log entries:
+
+#### 1. Message Operation Logs
+
+When messages are pushed to or pulled from queues, the following information is logged:
+
+```json
+{
+  "timestamp": "ISO-8601 timestamp",
+  "queue": "name of the queue",
+  "action": "push or pull",
+  "message_id": "unique message ID",
+  "message_type": "transaction or prediction",
+  "content": "full message content"
+}
+```
+
+This format ensures that all message operations are traceable and can be audited if needed.
+
+#### 2. HTTP Request/Response Logs
+
+For HTTP requests and responses, the following information is logged:
+
+```json
+{
+  "timestamp": "ISO-8601 timestamp",
+  "level": "INFO/WARNING/ERROR",
+  "message": "Request/Response description",
+  "module": "module name",
+  "function": "function name",
+  "line": "line number",
+  "source": "request source",
+  "destination": "request destination",
+  "headers": "HTTP headers",
+  "metadata": "additional metadata",
+  "body": "request/response body"
+}
+```
+
+### Log Implementation
+
+The logging system is implemented in `logger.py` with the following components:
+
+1. **CustomFormatter**: A custom log formatter that outputs logs in structured JSON format
+2. **setup_logger**: Function to configure the logger with console and file handlers
+3. **log_request_response**: Function to log HTTP requests and responses
+4. **log_message**: Function to log message operations (push/pull)
+
+The log level can be configured in `config.json` and defaults to INFO.
+
 The service uses a comprehensive logging system that logs all requests and responses.
 
 ### Log Format
@@ -186,7 +273,7 @@ The service can be configured through a JSON configuration file or environment v
 
 ### Configuration Options
 
-- `max_messages_per_queue`: Maximum number of messages per queue (default: 1000)
+- `max_messages_per_queue`: Maximum number of messages per queue (fixed at 5 as per assignment requirements). This value can only be changed in the config file and cannot be modified through the UI
 - `persist_interval_seconds`: How often to persist queues (default: 60 seconds)
 - `storage_path`: Where to store the queue data (default: "./queue_data")
 - `port`: Port to run the service on (default: 7500)

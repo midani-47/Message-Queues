@@ -48,5 +48,5 @@ ehthumbs.db
 Thumbs.db 
 
 # json
-*.json
+#*.json
 

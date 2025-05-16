@@ -27,7 +27,8 @@ The service implements:
 - **Queue Management**: Create, list, and delete queues with appropriate access controls
 - **Message Operations**: Push messages to queues and pull messages from queues
 - **Persistence**: Queues are automatically persisted to disk and can be restored on service restart
-- **Configurable**: Max queue size, persistence intervals, and other settings can be configured
+- **Configurable**: Persistence intervals and other settings can be configured via config.json
+- **Fixed Queue Size**: Each queue has a maximum of 5 messages as specified in the config.json file. This limit cannot be modified through the UI and must be changed directly in the config file if needed
 - **Role-Based Access Control**: Different access levels for administrators, agents, and regular users
 - **Logging**: Comprehensive logging of all operations, requests, and responses
 - **Error Handling**: Graceful handling of common error conditions (queue full, empty, etc.)
@@ -38,6 +39,59 @@ The service implements:
 - Python 3.8 or higher
 - Docker and Docker Compose (for containerized deployment)
 - FastAPI and dependencies listed in requirements.txt
+
+## Logging
+
+The service logs all operations to `queue_service.log` in the root directory. The log format is structured JSON with the following information:
+
+- For message operations (push/pull):
+  ```json
+  {
+    "timestamp": "ISO-8601 timestamp",
+    "queue": "queue_name",
+    "action": "push or pull",
+    "message_id": "unique message ID",
+    "message_type": "transaction or prediction",
+    "content": "message content"
+  }
+  ```
+
+- For HTTP requests/responses:
+  ```json
+  {
+    "timestamp": "ISO-8601 timestamp",
+    "level": "INFO/WARNING/ERROR",
+    "message": "Request/Response description",
+    "module": "module name",
+    "function": "function name",
+    "line": "line number",
+    "source": "request source",
+    "destination": "request destination",
+    "headers": "HTTP headers",
+    "metadata": "additional metadata",
+    "body": "request/response body"
+  }
+  ```
+
+## Project Structure
+
+```
+/queue_service
+├── app/                      # Application code
+│   ├── __init__.py
+│   ├── auth.py              # Authentication and authorization
+│   ├── config.py            # Configuration handling
+│   ├── logger.py            # Logging setup and utilities
+│   ├── main.py              # FastAPI application and endpoints
+│   ├── models.py            # Pydantic models
+│   ├── queue_manager.py     # Queue management logic
+│   └── templates/           # HTML templates
+│       └── index.html       # Web UI
+├── config.json              # Configuration file
+├── Dockerfile               # Docker configuration
+├── queue_service.log        # Log file
+└── requirements.txt         # Python dependencies
+```
 
 ## Quick Setup
 

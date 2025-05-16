@@ -69,11 +69,9 @@
                 <h6>Create New Queue (Admin only)</h6>
                 <form id="create-queue-form" class="mb-4">
                     <div class="row mb-3">
-                        <div class="col-md-4">
+                        <div class="col-md-8">
                             <input type="text" class="form-control" id="queue-name" placeholder="Queue Name" required>
-                        </div>
-                        <div class="col-md-4">
-                            <input type="number" class="form-control" id="max-messages" placeholder="Max Messages" value="100">
+                            <small class="text-muted">Max messages per queue is set to 5 in the config file</small>
                         </div>
                         <div class="col-md-4">
                             <button type="submit" class="btn btn-success w-100">Create Queue</button>
@@ -113,10 +111,34 @@
                                 </select>
                             </div>
                             <div class="mb-3">
-                                <textarea class="form-control" id="message-content" rows="5" placeholder='{"customer": "test", "vendor_id": "123", "amount": 100}'></textarea>
-                                <small class="text-muted">Enter a valid JSON object</small>
-                                <small class="text">Example: {"customer": "test", "vendor_id": "123", "amount": 100}</small>
+                                <label for="message-type" class="form-label">Message Type:</label>
+                                <select class="form-select" id="message-type">
+                                    <option value="transaction">Transaction</option>
+                                    <option value="prediction">Prediction Result</option>
+                                </select>
                             </div>
+                            <div class="mb-3">
+                                <label for="message-content" class="form-label">Message Content:</label>
+                                <textarea class="form-control" id="message-content" rows="5"></textarea>
+                                <small class="text-muted">Enter a valid JSON object based on the message type</small>
+                            </div>
+                            
+                            <div class="mb-3 card">
+                                <div class="card-header">
+                                    <h6 class="mb-0" id="example-title">Transaction Example</h6>
+                                </div>
+                                <div class="card-body">
+                                    <pre id="example-content" class="mb-0">{
+  "transaction_id": "tx123",
+  "customer_id": "cust456",
+  "customer_name": "John Doe",
+  "amount": 100.50,
+  "vendor_id": "vend789",
+  "date": "2025-05-16"
+}</pre>
+                                </div>
+                            </div>
+                            
                             <button type="submit" class="btn btn-info">Push Message</button>
                         </form>
                         <div id="push-status" class="mt-2"></div>
@@ -316,12 +338,11 @@
             }
             
             const queueName = document.getElementById('queue-name').value;
-            const maxMessages = document.getElementById('max-messages').value;
             
             const queueData = {
                 name: queueName,
                 config: {
-                    max_messages: parseInt(maxMessages),
+                    max_messages: 5,  // Using the default value from the comment
                     persist_interval_seconds: 30
                 }
             };
@@ -362,7 +383,47 @@
             }
         }
         
-        // Push Message
+        // Message Type Examples
+        const exampleMessages = {
+            transaction: {
+                title: "Transaction Example",
+                content: {
+                    transaction_id: "tx123",
+                    customer_id: "cust456",
+                    customer_name: "John Doe",
+                    amount: 100.50,
+                    vendor_id: "vend789",
+                    date: "2025-05-16"
+                }
+            },
+            prediction: {
+                title: "Prediction Result Example",
+                content: {
+                    transaction_id: "tx123",
+                    prediction: true,
+                    confidence: 0.89,
+                    model_version: "fraud-detector-v2.1",
+                    timestamp: "2025-05-16T16:35:00"
+                }
+            }
+        };
+        
+        // Update example based on selected message type
+        document.getElementById('message-type').addEventListener('change', (e) => {
+            const messageType = e.target.value;
+            const example = exampleMessages[messageType];
+            document.getElementById('example-title').textContent = example.title;
+            document.getElementById('example-content').textContent = JSON.stringify(example.content, null, 2);
+        });
+        
+        // Fill form with example data
+        document.getElementById('example-content').addEventListener('click', () => {
+            const messageType = document.getElementById('message-type').value;
+            const example = exampleMessages[messageType];
+            document.getElementById('message-content').value = JSON.stringify(example.content, null, 2);
+        });
+        
+        // Push Message - FIXED VERSION
         document.getElementById('push-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -377,27 +438,28 @@
                 return;
             }
             
-            let messageContent;
+            const messageType = document.getElementById('message-type').value;
+            const messageContent = document.getElementById('message-content').value;
+            
             try {
-                messageContent = JSON.parse(document.getElementById('message-content').value);
+                // Using fetchWithAuth which automatically includes token
+                const response = await fetchWithAuth(`${baseUrl}/queues/${queueName}/push?message_type=${messageType}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: messageContent
+                });
+                
+                if (response && response.ok) {
+                    const data = await response.json();
+                    showMessage('push-status', `${messageType.charAt(0).toUpperCase() + messageType.slice(1)} message pushed to queue "${queueName}" with ID: ${data.message_id}`);
+                    refreshQueues();
+                } else if (response) {
+                    const errorData = await response.json();
+                    showMessage('push-status', `Error pushing message: ${errorData.detail}`, true);
+                }
             } catch (error) {
-                showMessage('push-status', 'Invalid JSON: ' + error.message, true);
-                return;
-            }
-            
-            const response = await fetchWithAuth(`${baseUrl}/queues/${queueName}/push`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(messageContent)
-            });
-            
-            if (response && response.ok) {
-                const data = await response.json();
-                showMessage('push-status', `Message pushed to queue "${queueName}" with ID: ${data.message_id}`);
-                refreshQueues();
-            } else if (response) {
-                const errorData = await response.json();
-                showMessage('push-status', `Error pushing message: ${errorData.detail}`, true);
+                console.error('Error pushing message:', error);
+                showMessage('push-status', `Error pushing message: ${error.message}`, true);
             }
         });
         

@@ -14,11 +14,32 @@ class QueueRole(str, Enum):
 class MessageBase(BaseModel):
     """Base model for queue messages
     
-    This model is generic to store any kind of message content
-    that follows the transaction or result format from Assignment 2
+    This model is generic to store any kind of message content:
+    
+    1. Transaction data format from Assignment 2:
+       {
+         "transaction_id": str,
+         "customer_id": str,
+         "customer_name": str,
+         "amount": float,
+         "vendor_id": str,
+         "date": str,
+         ... other transaction fields
+       }
+    
+    2. Prediction result format from Assignment 2:
+       {
+         "transaction_id": str,
+         "prediction": bool,  # True for approved, False for rejected
+         "confidence": float, # Confidence score of the prediction
+         "model_version": str,
+         "timestamp": str,
+         ... other prediction fields
+       }
     """
-    content: Dict[str, Any]  # Content can be any valid JSON object
+    content: Dict[str, Any]  # Content can be any valid JSON object (transaction or prediction)
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    message_type: str = "transaction"  # Can be "transaction" or "prediction"
 
 
 class Message(MessageBase):

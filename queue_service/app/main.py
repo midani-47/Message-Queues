@@ -289,6 +289,7 @@ async def get_queue_info(
 async def push_message(
     queue_name: str,
     message: Dict[str, Any],
+    message_type: str = "transaction",  # Can be "transaction" or "prediction"
     token_data: TokenData = Depends(validate_agent_or_admin_privileges)
 ):
     """
@@ -298,12 +299,13 @@ async def push_message(
     
     Args:
         queue_name: Name of the queue
-        message: Message content
+        message: Message content (transaction data or prediction result from Assignment 2)
+        message_type: Type of message - either "transaction" or "prediction"
         
     Returns:
         Success message and message ID
     """
-    success, message_text, message_id = await queue_manager.push_message(queue_name, message)
+    success, message_text, message_id = await queue_manager.push_message(queue_name, message, message_type)
     
     if not success:
         if "does not exist" in message_text:
