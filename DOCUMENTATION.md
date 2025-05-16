@@ -232,7 +232,6 @@ For HTTP requests and responses, the following information is logged:
   "body": "request/response body"
 }
 ```
-
 ### Log Implementation
 
 The logging system is implemented in `logger.py` with the following components:
@@ -354,4 +353,10 @@ docker-compose up -d
 cd queue_service
 docker build -t queue-service .
 docker run -p 7500:7500 -v ./queue_data:/app/queue_data queue-service
+```
+
+### Build and Run Manually
+```bash
+cd queue_service
+python -m app.main
 ```
