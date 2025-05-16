@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "id": "d290b2e7-1eeb-476b-b0f1-38a57a1f7658",
+    "content": {
+      "customer": "test",
+      "vendor_id": "123",
+      "amount": 100
+    },
+    "timestamp": "2025-05-16T13:39:18.064834"
+  }
+]
