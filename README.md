@@ -111,8 +111,10 @@ docker-compose logs -f
 
 ```bash
 # In the assignment 3 directory
-docker-compose up --build
-Then open http://localhost:7500 in your browser to access the web UI.
+docker-compose down
+docker-compose build --no-cache
+docker-compose up
+# Then open http://localhost:7500 in your browser to access the web UI.
 ````
 
 ### Manual Setup

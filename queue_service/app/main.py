@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
 from typing import Dict, Any, Optional, List
+from starlette.responses import StreamingResponse
 import uvicorn
 import json
 import time
@@ -59,25 +60,33 @@ app.add_middleware(
 # Middleware for logging requests and responses
 @app.middleware("http")
 async def log_middleware(request: Request, call_next):
+    """Middleware to log all requests and responses"""
     # Generate a request ID
     request_id = str(time.time())
     
     # Get client IP
     client_host = request.client.host if request.client else "unknown"
     
-    # Log the request
-    request_body = None
     try:
-        request_body_bytes = await request.body()
-        if request_body_bytes:
-            request_body = json.loads(request_body_bytes)
-    except:
-        # If we can't parse the body as JSON, use the raw body
-        try:
-            request_body = (await request.body()).decode("utf-8")
-        except:
-            request_body = "Could not decode request body"
+        # Store original request body
+        body_bytes = await request.body()
+        # Create a new stream with the same content
+        request._body = body_bytes
+        
+        # Attempt to parse body as JSON
+        if body_bytes:
+            try:
+                request_body = json.loads(body_bytes)
+            except:
+                # If we can't parse as JSON, use the raw body as string
+                request_body = body_bytes.decode("utf-8")
+        else:
+            request_body = {}
+    except Exception as e:
+        # If there's an error reading the body, log that
+        request_body = {"error": f"Could not read request body: {str(e)}"}
     
+    # Log the request with all required fields
     log_request_response(
         source=client_host,
         destination=f"{request.url.path}",
@@ -91,8 +100,18 @@ async def log_middleware(request: Request, call_next):
     response = await call_next(request)
     process_time = time.time() - start_time
     
-    # Log the response without trying to access the body
-    # As some response types (like StreamingResponse) don't have a body attribute
+    # For JSON responses, try to capture the response body
+    response_body = {}
+    
+    # Only attempt to get the response body for certain types
+    if not isinstance(response, StreamingResponse) and hasattr(response, "body"):
+        try:
+            response_body = json.loads(response.body)
+        except:
+            # If we can't parse as JSON, use a placeholder
+            response_body = {"content": "Response body could not be parsed as JSON"}
+    
+    # Log the response with all required fields
     log_request_response(
         source=f"{request.url.path}",
         destination=client_host,
@@ -102,7 +121,7 @@ async def log_middleware(request: Request, call_next):
             "process_time_ms": round(process_time * 1000),
             "request_id": request_id
         },
-        body="Response body not logged for this response type"
+        body=response_body
     )
     
     return response
@@ -392,7 +411,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 # Run the server if executed directly
 if __name__ == "__main__":
     port = config.get("port", 7500)
-    host = config.get("host", "0.0.0.0")
+    host = config.get("host", "localhost")
     
     logger.info(f"Starting Queue Service on {host}:{port}")
     uvicorn.run("app.main:app", host=host, port=port, reload=True)
