@@ -57,11 +57,11 @@ Several key architectural decisions we made during the development of this appli
 
 ## Queue Service Design
 
-The Queue Service is designed as a specialized middleware component that facilitates asynchronous communication between distributed system components. It implements a message queue pattern where producers can push messages to queues and consumers can pull messages when they're ready to process them.
+The Queue Service is designed as a specialized middleware component that implements asynchronous communication between distributed system components.
 
 ### Core Components
 
-The service is structured around several key components, each with specific responsibilities:
+The application is structured around several key components, each with specific responsibilities:
 
 #### Queue Manager
 
@@ -165,97 +165,9 @@ To ensure proper message handling, the service implements queue typing:
 - **Transaction Queues**: Accept only transaction messages
 - **Prediction Queues**: Accept only prediction messages
 
-This separation serves several important purposes:
-
-1. **Data Integrity**: Ensures that consumers receive the expected message format
-2. **Specialized Processing**: Allows for type-specific validation and handling
-3. **Logical Separation**: Keeps different data flows isolated for better system organization
 
 When creating a queue, administrators must specify the queue type. The system then enforces this type restriction when messages are pushed to the queue.
 
-### Message Validation
-
-The service performs validation on incoming messages to ensure they conform to the expected structure:
-
-- **Type Checking**: Verifies that the message matches the queue type
-- **Required Fields**: Ensures all mandatory fields are present
-- **Format Validation**: Checks that field values have the correct format
-
-This validation happens at multiple levels:
-
-1. **API Layer**: Initial validation using Pydantic models
-2. **Queue Manager**: Secondary validation before adding to queue
-3. **Client-Side**: The web UI also performs validation before submission
-
-If validation fails, the service returns appropriate error messages to help clients correct their requests.
-
-## Data Models
-
-The service uses Pydantic models for data validation and serialization. Key models include:
-
-### Message Types
-
-The service supports two types of messages as required by the assignment:
-
-1. **Transaction Messages**: Contains transaction data with fields from Assignment 2:
-   ```json
-   {
-     "transaction_id": "string",
-     "customer_id": "string",
-     "customer_name": "string",
-     "amount": "float",
-     "vendor_id": "string",
-     "date": "string",
-     ... other transaction fields
-   }
-   ```
-
-2. **Prediction Result Messages**: Contains prediction results with fields from Assignment 2:
-   ```json
-   {
-     "transaction_id": "string",
-     "prediction": "boolean",  // True for approved, False for rejected
-     "confidence": "float",   // Confidence score of the prediction
-     "model_version": "string",
-     "timestamp": "string",
-     ... other prediction fields
-   }
-   ```
-
-The `MessageBase` model includes a `message_type` field that identifies whether a message contains transaction data or prediction results.
-
-### Key Models
-
-- **Message**: Represents a message in a queue with content and metadata
-  ```python
-  class Message(MessageBase):
-      id: str  # Unique message ID
-      content: Dict[str, Any]  # Message content
-      timestamp: datetime
-  ```
-
-- **QueueInfo**: Information about a queue
-  ```python
-  class QueueInfo:
-      name: str
-      message_count: int
-      created_at: datetime
-      last_modified: datetime
-  ```
-
-- **QueueConfig**: Configuration for a queue
-  ```python
-  class QueueConfig:
-      max_messages: int = 1000
-      persist_interval_seconds: int = 60
-  ```
-
-- **TokenData**: Authentication token data
-  ```python
-  class TokenData:
-      username: str
-      role: QueueRole
-  ```
 
 ## API Endpoints
 
@@ -298,49 +210,20 @@ The queue service implements a robust security model to ensure that only authori
 
 ### Authentication Implementation
 
-The authentication system is implemented in `auth.py` and uses JSON Web Tokens (JWT) to securely identify users. The implementation includes:
-
-1. **Token Generation**: The `/token` endpoint accepts username and password credentials and returns a JWT token if authentication succeeds. This token contains the user's identity and role, signed with a secret key to prevent tampering.
-
-2. **Token Validation**: All protected endpoints use the `get_current_user` dependency to validate tokens and extract user information. This function verifies the token signature, checks expiration, and extracts the user's role.
-
-3. **Role Extraction**: The system extracts the user's role from the token and uses it to enforce access control rules.
-
-The JWT implementation uses the `python-jose` library for token generation and validation, with the HS256 algorithm for signing.
+The authentication system is implemented in `auth.py` and uses JWT to securely identify users. The implementation includes the `/token` endpoint accepts username and password credentials and returns a JWT token if authentication succeeds. This token contains the user's identity and role, signed with a secret key to prevent tampering. All protected endpoints use the `get_current_user` dependency to validate tokens and extract user information. This function verifies the token signature, checks expiration, and extracts the user's role. The system extracts the user's role from the token and uses it to enforce access control rules.
 
 ### Role-Based Access Control
 
 The service defines three distinct roles, each with specific permissions:
 
 1. **Admin Role**:
-   - Can create and delete queues
-   - Can push messages to any queue
-   - Can pull messages from any queue
-   - Has full access to all system functionality
+   - Can create and delete queues, can push messages to any queue, can pull messages from any queue, and has full access to all system functionality
 
 2. **Agent Role**:
-   - Cannot create or delete queues
-   - Can push messages to any queue (both transaction and prediction types)
-   - Can pull messages from any queue
-   - Designed for services that need to interact with queues but shouldn't manage them
+   - Cannot create or delete queues, can push messages to any queue (both transaction and prediction types), and can pull messages from any queue. Designed for services that need to interact with queues but shouldn't manage them
 
 3. **User Role**:
-   - Can view queue information
-   - Cannot push or pull messages
-   - Cannot create or delete queues
-   - Designed for monitoring and read-only access
-
-### Permission Enforcement
-
-Permissions are enforced at multiple levels:
-
-1. **API Level**: Endpoints use FastAPI dependencies like `validate_admin_privileges` and `validate_agent_or_admin_privileges` to check if the user has the required role.
-
-2. **UI Level**: The web interface adapts based on the user's role, showing only the operations they're authorized to perform.
-
-3. **Queue Manager Level**: The queue manager also checks permissions when operations are requested.
-
-This multi-layered approach ensures that permissions are consistently enforced throughout the system.
+   - Can view queue information, cannot push or pull messages, cannot create or delete queues, and is designed for monitoring and read-only access.
 
 ### Security Considerations
 
@@ -374,258 +257,6 @@ The service persists queue state to disk to ensure data is not lost when the ser
 4. **Persistence on Shutdown**: Queues are persisted when the service shuts down gracefully
 5. **Restoration on Startup**: Queues are restored from persistent storage when the service starts
 
-### Persistence Configuration
-
-The persistence behavior can be configured with:
-- `persist_interval_seconds`: How often to persist queues (default: 60 seconds)
-- `storage_path`: Where to store the queue data (default: "./queue_data")
-
-## Logging System
-
-The queue service implements a comprehensive logging system that captures detailed information about all operations, particularly message processing. The logging system is designed to match the format and functionality from Assignment 2, ensuring consistency across the distributed system components.
-
-### Logging Design Philosophy
-
-The logging system was designed with several key principles in mind:
-
-1. **Structured Logging**: All logs are stored in structured JSON format, making them easy to parse, analyze, and integrate with log analysis tools.
-
-2. **Comprehensive Coverage**: The system logs all significant operations, including message pushes and pulls, queue creation and deletion, and HTTP requests and responses.
-
-3. **Type-Specific Logging**: Different log formats are used for transaction and prediction messages, capturing the relevant fields for each type.
-
-4. **Centralized Configuration**: Logging behavior can be controlled through the central configuration file, allowing easy adjustment of log levels and other parameters.
-
-### Message Operation Logging
-
-The most important logs are those related to message operations. These logs capture detailed information about messages as they flow through the system:
-
-#### Transaction Message Logs
-
-When transaction messages are pushed or pulled, the following information is logged:
-
-```json
-{
-  "timestamp": "YYYY-MM-DD HH:MM:SS",
-  "service": "queue_service",
-  "action": "push or pull",
-  "queue": "queue name",
-  "message_id": "unique message ID",
-  "transaction_id": "transaction identifier",
-  "customer_id": "customer identifier",
-  "amount": "transaction amount",
-  "vendor_id": "vendor identifier"
-}
-```
-
-#### Prediction Message Logs
-
-When prediction messages are pushed or pulled, the following information is logged:
-
-```json
-{
-  "timestamp": "YYYY-MM-DD HH:MM:SS",
-  "service": "queue_service",
-  "action": "push or pull",
-  "queue": "queue name",
-  "message_id": "unique message ID",
-  "transaction_id": "reference to original transaction",
-  "prediction": "true/false fraud prediction",
-  "confidence": "confidence score",
-  "model_version": "version of prediction model"
-}
-```
-
-### HTTP Request/Response Logging
-
-In addition to message operations, the system also logs HTTP requests and responses:
-
-```json
-{
-  "timestamp": "ISO-8601 timestamp",
-  "level": "INFO/WARNING/ERROR",
-  "message": "Request/Response description",
-  "module": "module name",
-  "function": "function name",
-  "line": "line number",
-  "source": "request source",
-  "destination": "request destination",
-  "headers": "HTTP headers",
-  "metadata": "additional metadata",
-  "body": "request/response body"
-}
-```
-
-### Implementation Details
-
-The logging system is implemented in `logger.py` with several key components:
-
-1. **CustomFormatter**: A custom log formatter that outputs logs in structured JSON format, ensuring consistency and parseability.
-
-2. **setup_logger**: Function that configures the logger with both console and file handlers, directing logs to both the terminal and the `queue_service.log` file.
-
-3. **log_message**: A specialized function for logging message operations, which formats logs differently based on the message type (transaction or prediction).
-
-4. **log_request_response**: Function for logging HTTP requests and responses, capturing headers, body content, and other metadata.
-
-All logs are written to `queue_service.log` in the root directory of the application, providing a centralized location for monitoring and analysis.
-
-## API Endpoints
-
-The queue service exposes a RESTful API that provides comprehensive functionality for queue management and message operations. The API is designed to be intuitive, consistent, and secure.
-
-### Authentication Endpoints
-
-#### 1. Get Access Token
-
-```
-POST /token
-```
-
-**Purpose**: Authenticates a user and returns a JWT token for subsequent requests.
-
-**Request Body**:
-```json
-{
-  "username": "string",
-  "password": "string"
-}
-```
-
-**Response**:
-```json
-{
-  "access_token": "string",
-  "token_type": "bearer"
-}
-```
-
-**Notes**: Supports three user roles: admin, agent, and user, each with different permissions.
-
-#### 2. Get Current User
-
-```
-GET /current-user
-```
-
-**Purpose**: Returns information about the currently authenticated user.
-
-**Response**:
-```json
-{
-  "username": "string",
-  "role": "admin|agent|user"
-}
-```
-
-### Queue Management Endpoints
-
-#### 1. List Queues
-
-```
-GET /queues
-```
-
-**Purpose**: Lists all available queues and their information.
-
-**Response**:
-```json
-{
-  "queues": [
-    {
-      "name": "string",
-      "message_count": "integer",
-      "queue_type": "transaction|prediction",
-      "created_at": "datetime",
-      "last_modified": "datetime"
-    }
-  ]
-}
-```
-
-#### 2. Create Queue
-
-```
-POST /queues
-```
-
-**Purpose**: Creates a new queue with the specified name and type.
-
-**Request Body**:
-```json
-{
-  "name": "string",
-  "config": {
-    "max_messages": 5,
-    "persist_interval_seconds": 60,
-    "queue_type": "transaction|prediction"
-  }
-}
-```
-
-**Response**: Returns the created queue information.
-
-**Notes**: Only administrators can create queues. The max_messages is fixed at 5 as per requirements.
-
-#### 3. Get Queue Information
-
-```
-GET /queues/{queue_name}
-```
-
-**Purpose**: Gets detailed information about a specific queue.
-
-**Response**: Returns the queue information.
-
-#### 4. Delete Queue
-
-```
-DELETE /queues/{queue_name}
-```
-
-**Purpose**: Deletes a queue and all its messages.
-
-**Notes**: Only administrators can delete queues.
-
-### Message Operation Endpoints
-
-#### 1. Push Message
-
-```
-POST /queues/{queue_name}/push?message_type={message_type}
-```
-
-**Purpose**: Pushes a message to the specified queue.
-
-**Query Parameters**:
-- `message_type`: Either "transaction" or "prediction"
-
-**Request Body**: JSON object containing the message content.
-
-**Response**:
-```json
-{
-  "message": "string",
-  "message_id": "string"
-}
-```
-
-**Notes**: 
-- Only admins and agents can push messages
-- Message type must match the queue type
-- Messages must include required fields based on their type
-
-#### 2. Pull Message
-
-```
-GET /queues/{queue_name}/pull
-```
-
-**Purpose**: Pulls the oldest message from the specified queue.
-
-**Response**: Returns the message content and metadata.
-
-**Notes**: Only admins and agents can pull messages.
 
 ## Deployment and Configuration
 
