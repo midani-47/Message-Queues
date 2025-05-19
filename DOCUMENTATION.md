@@ -1,6 +1,7 @@
 # Technical Documentation: Message Queue Service for Distributed Systems
 
-## Author
+## Authors
+- Nevin Joseph
 - Abed Midani
 
 ## Table of Contents
@@ -20,39 +21,39 @@
 
 This document provides technical details about a message queue service designed to facilitate communication between distributed system components. The service is built to handle both transaction data and prediction results, providing a reliable way to decouple components in a distributed architecture.
 
-The message queue service was developed as part of Assignment 3, building upon the transaction and authentication services from Assignment 2. It serves as a critical middleware component that enables asynchronous communication between services, improving system resilience and scalability.
+The message queue service was developed as part of Assignment_3, based on the transaction and authentication services from Assignment_2. It serves as a middleware component that enables asynchronous communication between services.
 
 ## System Architecture
 
-The message queue service follows a microservices architecture pattern, designed to operate as a standalone service that can be integrated with other components of a distributed system. The architecture emphasizes resilience, scalability, and ease of integration.
+The message queue service follows a microservices architecture pattern, designed to operate as a service that can be integrated with other components of a distributed system. 
 
 ### Technology Stack
 
 The system is built using the following technologies:
 
-- **FastAPI**: Chosen for its high performance, automatic API documentation, and built-in validation. FastAPI's asynchronous capabilities make it ideal for a message queue service that needs to handle concurrent requests efficiently.
+- **Docker**: Inspired by the lectures, and even before you mentioned the bonus in the following assingment, we chose this for the experience. The application is containerized using Docker, making it interesting to deploy. Docker Compose is used to utilize the service deployment.
 
-- **Pydantic**: Used for data validation, serialization, and documentation. Pydantic models ensure that all messages conform to the expected structure, reducing errors and improving reliability.
+- **FastAPI**: We ended up choosing this one for its high performance, automatic API documentation, and built-in validation. FastAPI's asynchronous capabilities seem to make it compatible with a message queue service.
+
+- **Pydantic**: We chose this one for data validation, serialization, and documentation. Pydantic models ensure that all messages conform to the expected structure, and reduce errors.
 
 - **JWT Authentication**: Implemented for secure access control, allowing different roles (admin, agent, user) to have appropriate permissions when interacting with the queue service.
-
-- **Docker**: The service is containerized using Docker, making it easy to deploy and scale in various environments. Docker Compose is used to orchestrate the service deployment.
 
 - **File-based Persistence**: Queue data is persisted to disk using a simple file-based storage mechanism, ensuring that messages are not lost in case of service restarts.
 
 ### Architecture Decisions
 
-Several key architectural decisions were made during the development of the message queue service:
+Several key architectural decisions we made during the development of this application:
 
-1. **Separate Queue Types**: The service supports two distinct queue types - transaction queues and prediction queues. This separation ensures that messages are properly routed and processed according to their type.
+1. **Web UI**: A browser-based UI is provided for easy management and monitoring of queues, making the service accessible to both technical and non-technical users.
 
-2. **Role-Based Access Control**: Different user roles (admin, agent, user) have different permissions, ensuring that only authorized users can perform sensitive operations like creating queues or pushing messages.
+2. **Separate Queue Types**: The service supports two distinct queue types - transaction queues and prediction queues. This separation ensures that messages are properly routed and processed according to their type. Note, they are separate.
 
-3. **In-Memory Processing with Persistence**: Queues are maintained in memory for high performance, with periodic persistence to disk for durability. This hybrid approach balances speed and reliability.
+3. **Role-Based Access Control**: Different user roles (admin, agent, user) have different permissions, so that only authorized users can perform certain tasks like creating queues, deleting queues, pushing messages, or pulling messages. Admin does it all, whereas agent can push and pull but not delete. Users do not have such permissions.
 
-4. **RESTful API Design**: The service exposes a clean RESTful API that makes it easy to integrate with other services and clients.
+4. **In-Memory Processing with Persistence**: Queues are maintained in memory with periodic persistence (in queue_data directory). 
 
-5. **Web UI**: A browser-based UI is provided for easy management and monitoring of queues, making the service accessible to both technical and non-technical users.
+
 
 ## Queue Service Design
 
