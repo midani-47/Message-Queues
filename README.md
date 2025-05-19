@@ -136,9 +136,7 @@ source venv/bin/activate
 # Install dependencies
 pip install -r queue_service/requirements.txt
 
-# Start the service
-cd queue_service
-python -m app.main
+
 ```
 
 ## Testing the Service
@@ -168,52 +166,12 @@ The easiest way to test the service is through the web UI, which is available at
    - Select a queue from the dropdown
    - Click "Pull Message"
 
-### Using HTTP Requests
-
-You can also test the service using HTTP requests with tools like curl or Postman:
-
-1. **Get Authentication Token**:
-   ```bash
-   curl -X POST http://localhost:7500/token \
-     -H "Content-Type: application/x-www-form-urlencoded" \
-     -d "username=admin&password=admin_password"
-   ```
-
-2. **Create a Queue** (Admin only):
-   ```bash
-   curl -X POST http://localhost:7500/queues \
-     -H "Authorization: Bearer YOUR_TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"name":"test_queue","config":{"max_messages":5,"persist_interval_seconds":60,"queue_type":"transaction"}}'
-   ```
-
-3. **Push a Transaction Message**:
-   ```bash
-   curl -X POST "http://localhost:7500/queues/test_queue/push?message_type=transaction" \
-     -H "Authorization: Bearer YOUR_TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"transaction_id":"123","customer_id":"456","amount":100.0,"vendor_id":"789"}'
-   ```
-
-4. **Push a Prediction Message** (to a prediction queue):
-   ```bash
-   curl -X POST "http://localhost:7500/queues/prediction_queue/push?message_type=prediction" \
-     -H "Authorization: Bearer YOUR_TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"transaction_id":"123","prediction":true,"confidence":0.95,"model_version":"1.0"}'
-   ```
-
-5. **Pull a Message**:
-   ```bash
-   curl -X GET http://localhost:7500/queues/test_queue/pull \
-     -H "Authorization: Bearer YOUR_TOKEN"
-   ```
 
 ### Important Notes
 
 - Queue names must be alphanumeric
 - Each queue has a maximum of 5 messages (configured in config.json)
-- Message types must match the queue type
+- Message types must match the queue type (transaction, or prediction)
 - Transaction messages require fields: transaction_id, customer_id, amount, vendor_id
 - Prediction messages require fields: transaction_id, prediction, confidence
 
@@ -281,10 +239,5 @@ For testing purposes, the service includes three predefined users:
 └── DOCUMENTATION.md         # Detailed documentation
 ```
 
-See [DOCUMENTATION.md](DOCUMENTATION.md) for more detailed information about the implementation and usage of this service.
+Plrsdr see [DOCUMENTATION.md](DOCUMENTATION.md) for more detailed information about the implementation and usage of this service.
 
-## Common Issues
-
-- If you have permission issues with the queue_data directory, make sure the directory has proper read/write permissions
-- If authentication fails, check that you're using the correct credentials and token format
-- For any configuration issues, verify your config.json file and environment variables
