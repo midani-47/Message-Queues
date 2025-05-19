@@ -122,7 +122,8 @@ def log_message(queue_name: str, message: Dict, action: str):
     
     # Also write directly to the log file to ensure it's captured
     try:
-        with open("/app/queue_service.log", "a") as f:
+        # Use a path relative to the working directory
+        with open("queue_service.log", "a") as f:
             f.write(f"{log_str}\n")
     except Exception as e:
         logger.error(f"Error writing to log file: {str(e)}")
@@ -149,8 +150,14 @@ def log_request_response(
     """
     logger_method = getattr(logger, level.lower(), logger.info)
     
-    # Create a record with the required fields
-    extra = {
+    # Create a log entry with the required fields
+    log_entry = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "level": level,
+        "message": "Request/Response",
+        "module": "queue_service",
+        "function": "log_request_response",
+        "line": "N/A",
         "source": source,
         "destination": destination,
         "headers": headers or {},
@@ -158,5 +165,16 @@ def log_request_response(
         "body": body or {}
     }
     
-    # Log with extra parameters
-    logger_method("Request/Response", extra=extra)
+    # Convert to JSON string
+    log_str = json.dumps(log_entry)
+    
+    # Log with standard logger
+    logger_method(log_str)
+    
+    # Also write directly to the log file to ensure it's captured
+    try:
+        # Use a path relative to the working directory
+        with open("queue_service.log", "a") as f:
+            f.write(f"{log_str}\n")
+    except Exception as e:
+        logger.error(f"Error writing to log file: {str(e)}")
