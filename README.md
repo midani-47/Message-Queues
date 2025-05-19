@@ -174,6 +174,7 @@ The easiest way to test the service is through the web UI, which is available at
 - Message types must match the queue type (transaction, or prediction)
 - Transaction messages require fields: transaction_id, customer_id, amount, vendor_id
 - Prediction messages require fields: transaction_id, prediction, confidence
+- The message queue service uses a maximum number of messages per queue, which is primarily configured through the global max_messages_per_queue setting in the config.json file (currently set to 5 as per requirements). This setting serves as the default for all queues in the system. The application also supports a more flexible model where individual queues can have their own limits specified during creation, allowing for queue-specific configurations if needed. To test this functionality, simply modify the max_messages_per_queue value in the configuration file before starting the service, or for individual queues, include a custom max_messages value when creating a new queue through the API.
 
 ## Service API
 
