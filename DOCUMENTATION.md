@@ -1,51 +1,192 @@
-# Message Queue Service Documentation
+# Technical Documentation: Message Queue Service for Distributed Systems
 
-This document provides detailed information about the implementation, architecture, and usage of the Message Queue Service.
+## Author
+- Abed Midani
 
 ## Table of Contents
-
-1. [Architecture Overview](#architecture-overview)
-2. [Component Descriptions](#component-descriptions)
-3. [Data Models](#data-models)
-4. [API Endpoints](#api-endpoints)
+1. [Introduction](#introduction)
+2. [System Architecture](#system-architecture)
+3. [Queue Service Design](#queue-service-design)
+4. [Message Types and Processing](#message-types-and-processing)
 5. [Authentication and Authorization](#authentication-and-authorization)
 6. [Persistence Mechanism](#persistence-mechanism)
 7. [Logging System](#logging-system)
-8. [Configuration Options](#configuration-options)
-9. [Error Handling](#error-handling)
-10. [Testing](#testing)
+8. [API Endpoints](#api-endpoints)
+9. [Web UI Implementation](#web-ui-implementation)
+10. [Deployment and Configuration](#deployment-and-configuration)
+11. [Limitations and Future Improvements](#limitations-and-future-improvements)
 
-## Architecture Overview
+## Introduction
 
-The Message Queue Service is designed as a standalone microservice that provides queue functionality for high-performance computing tasks. It follows RESTful API design principles and uses FastAPI as the web framework.
+This document provides technical details about a message queue service designed to facilitate communication between distributed system components. The service is built to handle both transaction data and prediction results, providing a reliable way to decouple components in a distributed architecture.
 
-Key architectural features:
-- **Stateful Service**: Maintains queue state in memory with persistence to disk
-- **Role-Based Access Control**: Different permission levels for different user roles
-- **Thread-Safe Queues**: Locks for thread safety in queue operations
-- **Asynchronous API**: FastAPI's async support for handling concurrent requests
-- **Configurable**: Configuration via file and environment variables
-- **Persistence**: Automatic and configurable persistence to disk
+The message queue service was developed as part of Assignment 3, building upon the transaction and authentication services from Assignment 2. It serves as a critical middleware component that enables asynchronous communication between services, improving system resilience and scalability.
 
-## Component Descriptions
+## System Architecture
 
-### Main Components
+The message queue service follows a microservices architecture pattern, designed to operate as a standalone service that can be integrated with other components of a distributed system. The architecture emphasizes resilience, scalability, and ease of integration.
 
-- **FastAPI Application (`main.py`)**: Defines API endpoints and handles requests
-- **Queue Manager (`queue_manager.py`)**: Core component that handles queue operations and persistence
-- **Authentication (`auth.py`)**: JWT-based authentication and authorization
-- **Data Models (`models.py`)**: Pydantic models for data validation
-- **Configuration (`config.py`)**: Configuration management
-- **Logging (`logger.py`)**: Comprehensive request/response logging
+### Technology Stack
 
-### Queue Manager
+The system is built using the following technologies:
 
-The Queue Manager is the core component responsible for:
-1. Creating and deleting queues
-2. Managing message push and pull operations
-3. Periodically persisting queue state to disk
-4. Restoring queues from persistent storage on startup
-5. Enforcing queue limits and access control
+- **FastAPI**: Chosen for its high performance, automatic API documentation, and built-in validation. FastAPI's asynchronous capabilities make it ideal for a message queue service that needs to handle concurrent requests efficiently.
+
+- **Pydantic**: Used for data validation, serialization, and documentation. Pydantic models ensure that all messages conform to the expected structure, reducing errors and improving reliability.
+
+- **JWT Authentication**: Implemented for secure access control, allowing different roles (admin, agent, user) to have appropriate permissions when interacting with the queue service.
+
+- **Docker**: The service is containerized using Docker, making it easy to deploy and scale in various environments. Docker Compose is used to orchestrate the service deployment.
+
+- **File-based Persistence**: Queue data is persisted to disk using a simple file-based storage mechanism, ensuring that messages are not lost in case of service restarts.
+
+### Architecture Decisions
+
+Several key architectural decisions were made during the development of the message queue service:
+
+1. **Separate Queue Types**: The service supports two distinct queue types - transaction queues and prediction queues. This separation ensures that messages are properly routed and processed according to their type.
+
+2. **Role-Based Access Control**: Different user roles (admin, agent, user) have different permissions, ensuring that only authorized users can perform sensitive operations like creating queues or pushing messages.
+
+3. **In-Memory Processing with Persistence**: Queues are maintained in memory for high performance, with periodic persistence to disk for durability. This hybrid approach balances speed and reliability.
+
+4. **RESTful API Design**: The service exposes a clean RESTful API that makes it easy to integrate with other services and clients.
+
+5. **Web UI**: A browser-based UI is provided for easy management and monitoring of queues, making the service accessible to both technical and non-technical users.
+
+## Queue Service Design
+
+The Queue Service is designed as a specialized middleware component that facilitates asynchronous communication between distributed system components. It implements a message queue pattern where producers can push messages to queues and consumers can pull messages when they're ready to process them.
+
+### Core Components
+
+The service is structured around several key components, each with specific responsibilities:
+
+#### Queue Manager
+
+The Queue Manager (`queue_manager.py`) is the central component responsible for all queue operations. It implements:
+
+- **Queue Creation and Deletion**: Creating and removing queues with appropriate type designation (transaction or prediction)
+- **Message Operations**: Pushing messages to and pulling messages from queues
+- **Concurrency Control**: Using asyncio locks to ensure thread-safe operations
+- **Persistence**: Periodically saving queue state to disk and restoring on startup
+- **Queue Type Enforcement**: Ensuring messages match the queue type they're being pushed to
+
+The Queue Manager maintains queues as in-memory data structures (Python's `deque`) for high performance, while also providing durability through periodic persistence.
+
+#### API Layer
+
+The API layer (`main.py`) exposes the Queue Manager's functionality through a RESTful HTTP interface. It handles:
+
+- **Request Routing**: Directing requests to appropriate handlers
+- **Authentication**: Verifying user identity and permissions
+- **Input Validation**: Ensuring requests contain valid data
+- **Response Formatting**: Providing consistent JSON responses
+- **Error Handling**: Returning appropriate HTTP status codes and error messages
+
+The API is built using FastAPI, which provides automatic validation, documentation, and efficient request handling.
+
+#### Authentication System
+
+The authentication system (`auth.py`) provides secure access control through:
+
+- **JWT Tokens**: Generating and validating JSON Web Tokens
+- **Role-Based Access**: Enforcing different permissions for admin, agent, and user roles
+- **Token Expiration**: Ensuring security through limited token lifetimes
+
+#### Data Models
+
+The data models (`models.py`) define the structure of:
+
+- **Messages**: Including both transaction and prediction types
+- **Queues**: With configuration options like maximum size and type
+- **Authentication**: User tokens and roles
+
+These models use Pydantic for validation and serialization, ensuring data integrity throughout the system.
+
+#### Web UI
+
+The web UI (`templates/index.html`) provides a user-friendly interface for:
+
+- **Authentication**: Logging in with different roles
+- **Queue Management**: Creating, viewing, and deleting queues
+- **Message Operations**: Pushing and pulling messages with appropriate type validation
+
+The UI adapts based on the user's role, showing only the operations they're authorized to perform.
+
+## Message Types and Processing
+
+A key feature of the queue service is its support for different message types, specifically designed to handle both transaction data and prediction results from Assignment 2. This design allows for specialized processing and validation based on message content.
+
+### Message Type Definitions
+
+The service supports two distinct message types:
+
+#### 1. Transaction Messages
+
+Transaction messages contain financial transaction data with the following structure:
+
+```json
+{
+  "transaction_id": "unique identifier for the transaction",
+  "customer_id": "identifier for the customer",
+  "customer_name": "name of the customer",
+  "amount": "transaction amount as a float",
+  "vendor_id": "identifier for the vendor",
+  "date": "transaction date",
+  "additional_fields": "any other transaction-specific data"
+}
+```
+
+These messages are typically pushed to transaction queues by systems that capture or generate transaction data.
+
+#### 2. Prediction Messages
+
+Prediction messages contain fraud detection results with the following structure:
+
+```json
+{
+  "transaction_id": "reference to the original transaction",
+  "prediction": "boolean indicating fraud detection result",
+  "confidence": "confidence score as a float between 0 and 1",
+  "model_version": "version of the prediction model used",
+  "timestamp": "when the prediction was made",
+  "additional_fields": "any other prediction-specific data"
+}
+```
+
+These messages are typically pushed to prediction queues by fraud detection systems after analyzing transactions.
+
+### Queue Types and Message Routing
+
+To ensure proper message handling, the service implements queue typing:
+
+- **Transaction Queues**: Accept only transaction messages
+- **Prediction Queues**: Accept only prediction messages
+
+This separation serves several important purposes:
+
+1. **Data Integrity**: Ensures that consumers receive the expected message format
+2. **Specialized Processing**: Allows for type-specific validation and handling
+3. **Logical Separation**: Keeps different data flows isolated for better system organization
+
+When creating a queue, administrators must specify the queue type. The system then enforces this type restriction when messages are pushed to the queue.
+
+### Message Validation
+
+The service performs validation on incoming messages to ensure they conform to the expected structure:
+
+- **Type Checking**: Verifies that the message matches the queue type
+- **Required Fields**: Ensures all mandatory fields are present
+- **Format Validation**: Checks that field values have the correct format
+
+This validation happens at multiple levels:
+
+1. **API Layer**: Initial validation using Pydantic models
+2. **Queue Manager**: Secondary validation before adding to queue
+3. **Client-Side**: The web UI also performs validation before submission
+
+If validation fails, the service returns appropriate error messages to help clients correct their requests.
 
 ## Data Models
 
@@ -152,13 +293,63 @@ The `MessageBase` model includes a `message_type` field that identifies whether 
 
 ## Authentication and Authorization
 
-The service uses JWT (JSON Web Tokens) for authentication and role-based authorization.
+The queue service implements a robust security model to ensure that only authorized users can access specific functionalities. This model is built around JWT-based authentication and role-based access control.
 
-### Roles
+### Authentication Implementation
 
-- **Admin**: Can create and delete queues, push and pull messages
-- **Agent**: Can push and pull messages
-- **User**: Can view queue information only
+The authentication system is implemented in `auth.py` and uses JSON Web Tokens (JWT) to securely identify users. The implementation includes:
+
+1. **Token Generation**: The `/token` endpoint accepts username and password credentials and returns a JWT token if authentication succeeds. This token contains the user's identity and role, signed with a secret key to prevent tampering.
+
+2. **Token Validation**: All protected endpoints use the `get_current_user` dependency to validate tokens and extract user information. This function verifies the token signature, checks expiration, and extracts the user's role.
+
+3. **Role Extraction**: The system extracts the user's role from the token and uses it to enforce access control rules.
+
+The JWT implementation uses the `python-jose` library for token generation and validation, with the HS256 algorithm for signing.
+
+### Role-Based Access Control
+
+The service defines three distinct roles, each with specific permissions:
+
+1. **Admin Role**:
+   - Can create and delete queues
+   - Can push messages to any queue
+   - Can pull messages from any queue
+   - Has full access to all system functionality
+
+2. **Agent Role**:
+   - Cannot create or delete queues
+   - Can push messages to any queue (both transaction and prediction types)
+   - Can pull messages from any queue
+   - Designed for services that need to interact with queues but shouldn't manage them
+
+3. **User Role**:
+   - Can view queue information
+   - Cannot push or pull messages
+   - Cannot create or delete queues
+   - Designed for monitoring and read-only access
+
+### Permission Enforcement
+
+Permissions are enforced at multiple levels:
+
+1. **API Level**: Endpoints use FastAPI dependencies like `validate_admin_privileges` and `validate_agent_or_admin_privileges` to check if the user has the required role.
+
+2. **UI Level**: The web interface adapts based on the user's role, showing only the operations they're authorized to perform.
+
+3. **Queue Manager Level**: The queue manager also checks permissions when operations are requested.
+
+This multi-layered approach ensures that permissions are consistently enforced throughout the system.
+
+### Security Considerations
+
+The authentication system includes several security features:
+
+- **Token Expiration**: Tokens have a configurable expiration time (default: 30 minutes)
+- **Secure Password Handling**: For demo purposes, passwords are hardcoded, but in a production environment, they would be securely hashed and stored
+- **HTTPS Support**: The service can be configured to use HTTPS for secure communication
+
+These measures help protect the system from common security threats while maintaining usability.
 
 ### Token Generation
 
@@ -190,32 +381,63 @@ The persistence behavior can be configured with:
 
 ## Logging System
 
-The service implements a comprehensive logging system that records all operations to `queue_service.log` in the root directory. The logging system is designed to match the requirements from Assignment 2.
+The queue service implements a comprehensive logging system that captures detailed information about all operations, particularly message processing. The logging system is designed to match the format and functionality from Assignment 2, ensuring consistency across the distributed system components.
 
-### Log Format
+### Logging Design Philosophy
 
-Logs are stored in structured JSON format for easy parsing and analysis. There are two main types of log entries:
+The logging system was designed with several key principles in mind:
 
-#### 1. Message Operation Logs
+1. **Structured Logging**: All logs are stored in structured JSON format, making them easy to parse, analyze, and integrate with log analysis tools.
 
-When messages are pushed to or pulled from queues, the following information is logged:
+2. **Comprehensive Coverage**: The system logs all significant operations, including message pushes and pulls, queue creation and deletion, and HTTP requests and responses.
+
+3. **Type-Specific Logging**: Different log formats are used for transaction and prediction messages, capturing the relevant fields for each type.
+
+4. **Centralized Configuration**: Logging behavior can be controlled through the central configuration file, allowing easy adjustment of log levels and other parameters.
+
+### Message Operation Logging
+
+The most important logs are those related to message operations. These logs capture detailed information about messages as they flow through the system:
+
+#### Transaction Message Logs
+
+When transaction messages are pushed or pulled, the following information is logged:
 
 ```json
 {
-  "timestamp": "ISO-8601 timestamp",
-  "queue": "name of the queue",
+  "timestamp": "YYYY-MM-DD HH:MM:SS",
+  "service": "queue_service",
   "action": "push or pull",
+  "queue": "queue name",
   "message_id": "unique message ID",
-  "message_type": "transaction or prediction",
-  "content": "full message content"
+  "transaction_id": "transaction identifier",
+  "customer_id": "customer identifier",
+  "amount": "transaction amount",
+  "vendor_id": "vendor identifier"
 }
 ```
 
-This format ensures that all message operations are traceable and can be audited if needed.
+#### Prediction Message Logs
 
-#### 2. HTTP Request/Response Logs
+When prediction messages are pushed or pulled, the following information is logged:
 
-For HTTP requests and responses, the following information is logged:
+```json
+{
+  "timestamp": "YYYY-MM-DD HH:MM:SS",
+  "service": "queue_service",
+  "action": "push or pull",
+  "queue": "queue name",
+  "message_id": "unique message ID",
+  "transaction_id": "reference to original transaction",
+  "prediction": "true/false fraud prediction",
+  "confidence": "confidence score",
+  "model_version": "version of prediction model"
+}
+```
+
+### HTTP Request/Response Logging
+
+In addition to message operations, the system also logs HTTP requests and responses:
 
 ```json
 {
@@ -232,77 +454,468 @@ For HTTP requests and responses, the following information is logged:
   "body": "request/response body"
 }
 ```
-### Log Implementation
 
-The logging system is implemented in `logger.py` with the following components:
+### Implementation Details
 
-1. **CustomFormatter**: A custom log formatter that outputs logs in structured JSON format
-2. **setup_logger**: Function to configure the logger with console and file handlers
-3. **log_request_response**: Function to log HTTP requests and responses
-4. **log_message**: Function to log message operations (push/pull)
+The logging system is implemented in `logger.py` with several key components:
 
-The log level can be configured in `config.json` and defaults to INFO.
+1. **CustomFormatter**: A custom log formatter that outputs logs in structured JSON format, ensuring consistency and parseability.
 
-The service uses a comprehensive logging system that logs all requests and responses.
+2. **setup_logger**: Function that configures the logger with both console and file handlers, directing logs to both the terminal and the `queue_service.log` file.
 
-### Log Format
+3. **log_message**: A specialized function for logging message operations, which formats logs differently based on the message type (transaction or prediction).
 
-Logs are output in a structured JSON format with the following information:
-- **Timestamp**: When the log was created
-- **Level**: Log level (INFO, WARNING, ERROR, etc.)
-- **Message**: Log message
-- **Source**: Where the request came from
-- **Destination**: Where the request is going to
-- **Headers**: HTTP headers (if applicable)
-- **Metadata**: Additional metadata
-- **Body**: Request or response body
+4. **log_request_response**: Function for logging HTTP requests and responses, capturing headers, body content, and other metadata.
 
-### Request/Response Logging
+All logs are written to `queue_service.log` in the root directory of the application, providing a centralized location for monitoring and analysis.
 
-Every request and response is logged with:
-- Source and destination
-- Headers
-- Request/response body
-- Processing time
-- Status code
+## API Endpoints
 
-## Configuration Options
+The queue service exposes a RESTful API that provides comprehensive functionality for queue management and message operations. The API is designed to be intuitive, consistent, and secure.
 
-The service can be configured through a JSON configuration file or environment variables.
+### Authentication Endpoints
 
-### Configuration Options
+#### 1. Get Access Token
 
-- `max_messages_per_queue`: Maximum number of messages per queue (fixed at 5 as per assignment requirements). This value can only be changed in the config file and cannot be modified through the UI
-- `persist_interval_seconds`: How often to persist queues (default: 60 seconds)
-- `storage_path`: Where to store the queue data (default: "./queue_data")
-- `port`: Port to run the service on (default: 7500)
-- `host`: Host to bind to (default: "0.0.0.0")
-- `log_level`: Logging level (default: "INFO")
-- `jwt_secret_key`: Secret key for JWT token generation
-- `jwt_algorithm`: Algorithm for JWT token generation (default: "HS256")
-- `jwt_expiration_minutes`: Token expiration time in minutes (default: 30)
+```
+POST /token
+```
+
+**Purpose**: Authenticates a user and returns a JWT token for subsequent requests.
+
+**Request Body**:
+```json
+{
+  "username": "string",
+  "password": "string"
+}
+```
+
+**Response**:
+```json
+{
+  "access_token": "string",
+  "token_type": "bearer"
+}
+```
+
+**Notes**: Supports three user roles: admin, agent, and user, each with different permissions.
+
+#### 2. Get Current User
+
+```
+GET /current-user
+```
+
+**Purpose**: Returns information about the currently authenticated user.
+
+**Response**:
+```json
+{
+  "username": "string",
+  "role": "admin|agent|user"
+}
+```
+
+### Queue Management Endpoints
+
+#### 1. List Queues
+
+```
+GET /queues
+```
+
+**Purpose**: Lists all available queues and their information.
+
+**Response**:
+```json
+{
+  "queues": [
+    {
+      "name": "string",
+      "message_count": "integer",
+      "queue_type": "transaction|prediction",
+      "created_at": "datetime",
+      "last_modified": "datetime"
+    }
+  ]
+}
+```
+
+#### 2. Create Queue
+
+```
+POST /queues
+```
+
+**Purpose**: Creates a new queue with the specified name and type.
+
+**Request Body**:
+```json
+{
+  "name": "string",
+  "config": {
+    "max_messages": 5,
+    "persist_interval_seconds": 60,
+    "queue_type": "transaction|prediction"
+  }
+}
+```
+
+**Response**: Returns the created queue information.
+
+**Notes**: Only administrators can create queues. The max_messages is fixed at 5 as per requirements.
+
+#### 3. Get Queue Information
+
+```
+GET /queues/{queue_name}
+```
+
+**Purpose**: Gets detailed information about a specific queue.
+
+**Response**: Returns the queue information.
+
+#### 4. Delete Queue
+
+```
+DELETE /queues/{queue_name}
+```
+
+**Purpose**: Deletes a queue and all its messages.
+
+**Notes**: Only administrators can delete queues.
+
+### Message Operation Endpoints
+
+#### 1. Push Message
+
+```
+POST /queues/{queue_name}/push?message_type={message_type}
+```
+
+**Purpose**: Pushes a message to the specified queue.
+
+**Query Parameters**:
+- `message_type`: Either "transaction" or "prediction"
+
+**Request Body**: JSON object containing the message content.
+
+**Response**:
+```json
+{
+  "message": "string",
+  "message_id": "string"
+}
+```
+
+**Notes**: 
+- Only admins and agents can push messages
+- Message type must match the queue type
+- Messages must include required fields based on their type
+
+#### 2. Pull Message
+
+```
+GET /queues/{queue_name}/pull
+```
+
+**Purpose**: Pulls the oldest message from the specified queue.
+
+**Response**: Returns the message content and metadata.
+
+**Notes**: Only admins and agents can pull messages.
+
+## Deployment and Configuration
+
+The queue service is designed to be easily deployed and configured, with sensible defaults and flexible configuration options.
+
+### Deployment Options
+
+The service can be deployed in several ways:
+
+#### 1. Docker Deployment (Recommended)
+
+The recommended deployment method is using Docker and Docker Compose, which provides a consistent environment and simplifies setup:
+
+```bash
+# Start the service using Docker Compose
+docker-compose up -d
+```
+
+This method automatically sets up the container with all dependencies, configures volumes for persistence, and exposes the service on port 7500.
+
+#### 2. Manual Docker Deployment
+
+Alternatively, the service can be deployed manually using Docker:
+
+```bash
+cd queue_service
+docker build -t queue-service .
+docker run -p 7500:7500 -v ./queue_data:/app/queue_data queue-service
+```
+
+#### 3. Local Deployment
+
+For development or testing, the service can be run directly on the host machine:
+
+```bash
+cd queue_service
+python -m app.main
+```
+
+This requires Python 3.8+ and all dependencies installed locally.
+
+### Configuration System
+
+The service uses a centralized configuration system implemented in `config.py`. This system loads configuration from a JSON file (`config.json`) and provides default values for any missing settings.
+
+### Key Configuration Options
+
+The following options can be configured in `config.json`:
+
+- **max_messages_per_queue**: Maximum number of messages per queue (fixed at 5 as per assignment requirements). This value can only be changed in the config file and cannot be modified through the UI.
+
+- **persist_interval_seconds**: How often queue state is persisted to disk (default: 60 seconds). Increasing this value improves performance but increases the risk of data loss in case of unexpected shutdowns.
+
+- **storage_path**: Path where queue data is stored (default: "/app/queue_data" in Docker, "./queue_data" otherwise). This should be a directory that persists across service restarts.
+
+- **port**: HTTP port for the service (default: 7500). The port the service listens on for incoming requests.
+
+- **host**: Host address to bind to (default: "0.0.0.0"). Using "0.0.0.0" allows connections from any IP address, while "localhost" restricts to local connections only.
+
+- **log_level**: Logging level (default: "INFO"). Can be set to "DEBUG", "INFO", "WARNING", "ERROR", or "CRITICAL".
+
+- **jwt_secret_key**: Secret key for JWT token generation. This should be changed in production environments to ensure security.
+
+- **jwt_algorithm**: Algorithm used for JWT tokens (default: "HS256").
+
+- **jwt_expiration_minutes**: Token expiration time in minutes (default: 30). Shorter times are more secure but require more frequent re-authentication.
+
+### Sample Configuration
+
+```json
+{
+    "max_messages_per_queue": 5,
+    "persist_interval_seconds": 60,
+    "storage_path": "/app/queue_data",
+    "port": 7500,
+    "host": "0.0.0.0",
+    "log_level": "INFO",
+    "jwt_secret_key": "your-secret-key-change-in-production",
+    "jwt_algorithm": "HS256",
+    "jwt_expiration_minutes": 30
+}
+```
+
+### Environment Variables
+
+In addition to the configuration file, the service also supports configuration through environment variables. This is particularly useful in containerized environments where environment variables are a common configuration mechanism.
+
+For example, the `QUEUE_CONFIG_PATH` environment variable can be used to specify the location of the configuration file.
 
 ## Error Handling
 
-The service includes comprehensive error handling for various conditions.
+The queue service implements a comprehensive error handling system to ensure that errors are properly caught, reported, and responded to. This system helps maintain service reliability and provides clear feedback to clients.
+
+### Error Handling Philosophy
+
+The error handling system is designed with several principles in mind:
+
+1. **Predictability**: Error responses follow a consistent format, making them easy to handle on the client side.
+
+2. **Specificity**: Error messages are specific and descriptive, helping clients understand what went wrong and how to fix it.
+
+3. **Appropriate Status Codes**: HTTP status codes are used correctly to indicate the nature of the error.
+
+4. **Graceful Degradation**: When errors occur, the service attempts to continue operating as much as possible.
 
 ### Common Error Conditions
 
-- **Queue Not Found**: When trying to access a non-existent queue
-- **Queue Full**: When trying to push to a queue that has reached its maximum capacity
-- **Queue Empty**: When trying to pull from an empty queue
-- **Insufficient Privileges**: When a user tries to perform an action they don't have permission for
-- **Invalid Token**: When authentication fails
-- **Token Expired**: When a token has expired
+The service handles several common error conditions:
 
-### Error Responses
+#### Queue Management Errors
 
-Error responses are standardized as:
+- **Queue Not Found**: When trying to access a non-existent queue (404 Not Found)
+- **Queue Already Exists**: When trying to create a queue with a name that already exists (409 Conflict)
+- **Invalid Queue Name**: When trying to create a queue with an invalid name (400 Bad Request)
+- **Queue Type Mismatch**: When trying to push a message type that doesn't match the queue type (400 Bad Request)
+
+#### Message Operation Errors
+
+- **Queue Full**: When trying to push to a queue that has reached its maximum capacity (409 Conflict)
+- **Queue Empty**: When trying to pull from an empty queue (404 Not Found)
+- **Invalid Message Format**: When trying to push a message with invalid or missing fields (400 Bad Request)
+
+#### Authentication Errors
+
+- **Invalid Credentials**: When trying to authenticate with incorrect username or password (401 Unauthorized)
+- **Invalid Token**: When using an invalid or malformed JWT token (401 Unauthorized)
+- **Token Expired**: When using an expired JWT token (401 Unauthorized)
+- **Insufficient Privileges**: When trying to perform an action without the required role (403 Forbidden)
+
+### Error Response Format
+
+All error responses follow a standardized format:
+
 ```json
 {
-    "detail": "Error message"
+  "detail": "Descriptive error message"
 }
 ```
+
+This format is automatically generated by FastAPI's exception handling system and provides a consistent interface for error handling on the client side.
+
+### Error Logging
+
+In addition to returning error responses to clients, the service also logs errors internally. This helps with debugging and monitoring the health of the service. Error logs include:
+
+- Timestamp of the error
+- Error type and message
+- Stack trace (for server errors)
+- Request information (for request-related errors)
+
+This comprehensive logging ensures that even if errors aren't immediately apparent to users, they can be identified and addressed by system administrators.
+
+## Web UI Implementation
+
+The queue service includes a web-based user interface that provides a user-friendly way to interact with the service. This UI is designed to be intuitive, responsive, and secure.
+
+### UI Design Philosophy
+
+The web UI was designed with several key principles in mind:
+
+1. **Role-Based Adaptation**: The UI dynamically adapts based on the user's role, showing only the operations they're authorized to perform.
+
+2. **Intuitive Workflow**: The interface follows a logical workflow for queue management and message operations.
+
+3. **Real-Time Feedback**: Operations provide immediate feedback to users, with clear success and error messages.
+
+4. **Responsive Design**: The UI works well on various screen sizes and devices.
+
+### Key UI Components
+
+The web interface consists of several main components:
+
+#### 1. Authentication Panel
+
+The authentication panel allows users to:
+
+- Log in with their username and password
+- See their current role and permissions
+- Log out when finished
+
+#### 2. Queue Management Panel
+
+The queue management panel provides:
+
+- A list of all available queues with their details (name, type, message count, etc.)
+- A form for creating new queues (admin only)
+- Buttons for deleting queues (admin only)
+
+#### 3. Message Operations Panel
+
+The message operations panel allows users to:
+
+- Select a queue for pushing or pulling messages
+- Choose the message type (transaction or prediction) when pushing
+- Enter message content in JSON format
+- View message examples for reference
+- Pull messages and view their content
+
+### Implementation Details
+
+The web UI is implemented using standard web technologies:
+
+- **HTML5**: For structure and content
+- **CSS3**: For styling and responsive design
+- **JavaScript**: For client-side interactivity and API communication
+- **Bootstrap**: For responsive layout and UI components
+
+The UI is served directly by the FastAPI application, which provides the HTML template and static assets. This integrated approach simplifies deployment and ensures that the UI is always in sync with the backend API.
+
+### Security Considerations
+
+The web UI implements several security measures:
+
+- **Token-Based Authentication**: All API requests from the UI include the JWT token for authentication
+- **Input Validation**: Client-side validation helps prevent invalid inputs
+- **XSS Protection**: Proper escaping of user-generated content
+- **CSRF Protection**: Token-based protection against cross-site request forgery
+
+These measures help ensure that the web UI is secure and resistant to common web vulnerabilities.
+
+## Limitations and Future Improvements
+
+While the queue service provides a robust and functional implementation, there are several limitations and areas for future improvement.
+
+### Current Limitations
+
+#### 1. Scalability Limitations
+
+- **In-Memory Storage**: The current implementation stores queues in memory, which limits the total number and size of queues based on available RAM.
+- **Single Instance**: The service runs as a single instance, without built-in clustering or load balancing.
+- **Fixed Queue Size**: Each queue has a fixed maximum size of 5 messages, which cannot be changed through the UI.
+
+#### 2. Durability Concerns
+
+- **Periodic Persistence**: Queue state is only persisted periodically, which could lead to data loss in case of unexpected shutdowns.
+- **Simple File Storage**: The persistence mechanism uses simple file storage, which lacks the robustness of a dedicated database.
+
+#### 3. Security Limitations
+
+- **Basic Authentication**: The authentication system uses hardcoded credentials for demonstration purposes.
+- **Simple Role System**: The role-based access control system is relatively simple and lacks fine-grained permissions.
+
+#### 4. Feature Limitations
+
+- **No Message Filtering**: There's no way to filter or search for specific messages within a queue.
+- **No Queue Statistics**: Limited metrics and statistics about queue performance and usage.
+- **No Message TTL**: Messages don't have a time-to-live or expiration mechanism.
+
+### Future Improvements
+
+Several improvements could be made to address these limitations:
+
+#### 1. Enhanced Scalability
+
+- **Distributed Queue Storage**: Implement a distributed storage system for queues, allowing horizontal scaling.
+- **Clustering Support**: Add support for running multiple instances with load balancing.
+- **Dynamic Queue Sizing**: Allow queue sizes to be configured dynamically based on needs.
+
+#### 2. Improved Durability
+
+- **Transaction-Based Persistence**: Implement a transactional persistence mechanism to prevent data loss.
+- **Database Integration**: Use a robust database for queue storage instead of file-based persistence.
+- **Real-Time Replication**: Implement real-time replication for high availability.
+
+#### 3. Enhanced Security
+
+- **OAuth Integration**: Support for OAuth 2.0 or other modern authentication protocols.
+- **Fine-Grained Permissions**: More detailed permission system beyond the three basic roles.
+- **Audit Logging**: Comprehensive audit logs for security-sensitive operations.
+
+#### 4. Additional Features
+
+- **Message Filtering**: Ability to search and filter messages based on content.
+- **Advanced Queue Statistics**: Detailed metrics on queue performance and usage.
+- **Message TTL**: Support for message expiration and automatic cleanup.
+- **Scheduled Messages**: Support for delayed or scheduled message delivery.
+- **Batch Operations**: Support for pushing or pulling multiple messages in a single operation.
+
+### Conclusion
+
+Despite these limitations, the current implementation provides a solid foundation for message queue functionality in a distributed system. It successfully fulfills the requirements of Assignment 3, providing a reliable way to handle both transaction data and prediction results.
+
+The service demonstrates good software engineering practices, including:
+
+- Clear separation of concerns
+- Comprehensive error handling
+- Proper authentication and authorization
+- Detailed logging
+- User-friendly interface
+
+With the suggested improvements, the service could evolve into an even more robust and scalable component of a production-grade distributed system.
 
 ## Testing
 
@@ -322,20 +935,20 @@ curl -X POST "http://localhost:7500/token?username=admin&password=admin_password
 curl -X POST "http://localhost:7500/queues" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name": "test_queue", "config": {"max_messages": 100, "persist_interval_seconds": 30}}'
+  -d '{"name": "testQueue", "config": {"max_messages": 100, "persist_interval_seconds": 30}}'
 ```
 
 #### Push a message
 ```bash
-curl -X POST "http://localhost:7500/queues/test_queue/push" \
+curl -X POST "http://localhost:7500/queues/testQueue/push" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"customer": "test_customer", "vendor_id": "vendor123", "amount": 100.50}'
+  -d '{"customer": "testCustomer", "vendor_id": "vendor123", "amount": 100.50, "transaction_id": "123456", "date": "2025-05-19", "customer_id": "123456"}'
 ```
 
 #### Pull a message
 ```bash
-curl -X GET "http://localhost:7500/queues/test_queue/pull" \
+curl -X GET "http://localhost:7500/queues/testQueue/pull" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 

@@ -281,9 +281,8 @@ class QueueManager:
         if message_type == "prediction" and queue_type != "prediction":
             return False, f"Cannot push prediction message to transaction queue '{queue_name}'", None
         
-        # Check role permissions
-        if user_role == "agent" and message_type == "transaction":
-            return False, "Agents can only push prediction messages, not transaction messages", None
+        # Both admins and agents can push any message type
+        # No need to check role permissions here as this is already handled by the endpoint
         
         # Validate message content based on type
         if message_type == "transaction":

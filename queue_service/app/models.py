@@ -8,6 +8,7 @@ class QueueRole(str, Enum):
     """Roles for queue access control"""
     ADMIN = "admin"
     AGENT = "agent"
+    USER = "user"
 
 
 class MessageBase(BaseModel):

@@ -110,7 +110,7 @@ docker-compose logs -f
 ```
 
 ```bash
-# In the assignment 3 directory
+# If you encounter strange cache issues (e.g., stale builds), try:
 docker-compose down
 docker-compose build --no-cache
 docker-compose up
@@ -140,6 +140,82 @@ pip install -r queue_service/requirements.txt
 cd queue_service
 python -m app.main
 ```
+
+## Testing the Service
+
+### Using the Web UI
+
+The easiest way to test the service is through the web UI, which is available at http://localhost:7500 after starting the service.
+
+1. **Authentication**:
+   - Log in with one of the following credentials:
+     - Admin: username `admin`, password `admin_password`
+     - Agent: username `agent`, password `agent_password`
+     - User: username `user`, password `user_password`
+
+2. **Creating Queues** (Admin only):
+   - Enter a queue name
+   - Select queue type (Transaction or Prediction)
+   - Click "Create Queue"
+
+3. **Pushing Messages** (Admin and Agent):
+   - Select a queue from the dropdown
+   - Select message type (must match the queue type)
+   - Enter message content in JSON format (examples are provided)
+   - Click "Push Message"
+
+4. **Pulling Messages** (Admin and Agent):
+   - Select a queue from the dropdown
+   - Click "Pull Message"
+
+### Using HTTP Requests
+
+You can also test the service using HTTP requests with tools like curl or Postman:
+
+1. **Get Authentication Token**:
+   ```bash
+   curl -X POST http://localhost:7500/token \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "username=admin&password=admin_password"
+   ```
+
+2. **Create a Queue** (Admin only):
+   ```bash
+   curl -X POST http://localhost:7500/queues \
+     -H "Authorization: Bearer YOUR_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"name":"test_queue","config":{"max_messages":5,"persist_interval_seconds":60,"queue_type":"transaction"}}'
+   ```
+
+3. **Push a Transaction Message**:
+   ```bash
+   curl -X POST "http://localhost:7500/queues/test_queue/push?message_type=transaction" \
+     -H "Authorization: Bearer YOUR_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"transaction_id":"123","customer_id":"456","amount":100.0,"vendor_id":"789"}'
+   ```
+
+4. **Push a Prediction Message** (to a prediction queue):
+   ```bash
+   curl -X POST "http://localhost:7500/queues/prediction_queue/push?message_type=prediction" \
+     -H "Authorization: Bearer YOUR_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"transaction_id":"123","prediction":true,"confidence":0.95,"model_version":"1.0"}'
+   ```
+
+5. **Pull a Message**:
+   ```bash
+   curl -X GET http://localhost:7500/queues/test_queue/pull \
+     -H "Authorization: Bearer YOUR_TOKEN"
+   ```
+
+### Important Notes
+
+- Queue names must be alphanumeric
+- Each queue has a maximum of 5 messages (configured in config.json)
+- Message types must match the queue type
+- Transaction messages require fields: transaction_id, customer_id, amount, vendor_id
+- Prediction messages require fields: transaction_id, prediction, confidence
 
 ## Service API
 

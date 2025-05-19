@@ -116,8 +116,16 @@ def log_message(queue_name: str, message: Dict, action: str):
             "model_version": content.get("model_version", "unknown")
         }
     
-    # Log the entry
-    logger.info(f"{action.capitalize()} message {message_id} in queue {queue_name}: {json.dumps(log_entry)}")
+    # Log the entry to both console and file
+    log_str = json.dumps(log_entry)
+    logger.info(log_str)
+    
+    # Also write directly to the log file to ensure it's captured
+    try:
+        with open("/app/queue_service.log", "a") as f:
+            f.write(f"{log_str}\n")
+    except Exception as e:
+        logger.error(f"Error writing to log file: {str(e)}")
 
 
 def log_request_response(

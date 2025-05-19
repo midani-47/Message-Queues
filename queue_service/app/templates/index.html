@@ -53,7 +53,8 @@
                 <div class="mt-3">
                     <small class="text-muted">Available test users: 
                         <code>admin/admin_password</code> (admin), 
-                        <code>agent/agent_password</code> (agent)
+                        <code>agent/agent_password</code> (agent),
+                        <code>user/user_password</code> (user)
                     </small>
                 </div>
             </div>
@@ -260,10 +261,9 @@
                 createQueueForm.style.display = 'none';
                 pushForm.style.display = 'block';
                 pullForm.style.display = 'block';
-                // Agents can only push prediction messages, not transaction messages
-                messageTypeSelect.querySelector('option[value="transaction"]').disabled = true;
+                // Agents can push any message type
+                messageTypeSelect.querySelector('option[value="transaction"]').disabled = false;
                 messageTypeSelect.querySelector('option[value="prediction"]').disabled = false;
-                messageTypeSelect.value = 'prediction';
             } else {
                 // No other roles supported
                 createQueueForm.style.display = 'none';
@@ -478,11 +478,8 @@
                 return;
             }
             
-            // Check role restrictions
-            if (userRole === 'agent' && messageType === 'transaction') {
-                showMessage('push-status', 'Agents can only push prediction messages, not transaction messages', true);
-                return;
-            }
+            // Both admins and agents can push any message type
+            // No need to check role restrictions here
             const messageContent = document.getElementById('message-content').value;
             
             try {

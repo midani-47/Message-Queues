@@ -177,7 +177,8 @@ async def login_for_access_token(username: str, password: str):
     # In a real application, this would validate against a database
     valid_users = {
         "admin": {"password": "admin_password", "role": QueueRole.ADMIN},
-        "agent": {"password": "agent_password", "role": QueueRole.AGENT}
+        "agent": {"password": "agent_password", "role": QueueRole.AGENT},
+        "user": {"password": "user_password", "role": QueueRole.USER}
     }
     
     # Check if user exists and password is correct
