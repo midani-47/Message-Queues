@@ -1,8 +1,9 @@
 from fastapi import FastAPI, HTTPException, Depends, Request, Response, status
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 from typing import Dict, Any, Optional, List
 from starlette.responses import StreamingResponse
@@ -57,74 +58,99 @@ app.add_middleware(
 )
 
 
-# Middleware for logging requests and responses
-@app.middleware("http")
-async def log_middleware(request: Request, call_next):
-    """Middleware to log all requests and responses"""
-    # Generate a request ID
-    request_id = str(time.time())
-    
-    # Get client IP
-    client_host = request.client.host if request.client else "unknown"
-    
-    try:
-        # Store original request body
-        body_bytes = await request.body()
-        # Create a new stream with the same content
-        request._body = body_bytes
+# Custom middleware for response logging
+class ResponseLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Generate a request ID
+        request_id = str(time.time())
         
-        # Attempt to parse body as JSON
-        if body_bytes:
-            try:
-                request_body = json.loads(body_bytes)
-            except:
-                # If we can't parse as JSON, use the raw body as string
-                request_body = body_bytes.decode("utf-8")
-        else:
-            request_body = {}
-    except Exception as e:
-        # If there's an error reading the body, log that
-        request_body = {"error": f"Could not read request body: {str(e)}"}
-    
-    # Log the request with all required fields
-    log_request_response(
-        source=client_host,
-        destination=f"{request.url.path}",
-        headers=dict(request.headers),
-        metadata={"method": request.method, "request_id": request_id},
-        body=request_body
-    )
-    
-    # Process the request
-    start_time = time.time()
-    response = await call_next(request)
-    process_time = time.time() - start_time
-    
-    # For JSON responses, try to capture the response body
-    response_body = {}
-    
-    # Only attempt to get the response body for certain types
-    if not isinstance(response, StreamingResponse) and hasattr(response, "body"):
+        # Get client IP
+        client_host = request.client.host if request.client else "unknown"
+        
+        # Capture request body
         try:
-            response_body = json.loads(response.body)
-        except:
-            # If we can't parse as JSON, use a placeholder
-            response_body = {"content": "Response body could not be parsed as JSON"}
+            # Store original request body
+            body_bytes = await request.body()
+            # Create a new stream with the same content
+            request._body = body_bytes
+            
+            # Try to parse body as JSON or form data
+            body_str = body_bytes.decode('utf-8') if body_bytes else ""
+            if body_str and body_str.strip().startswith('{'):
+                try:
+                    request_body = json.loads(body_str)
+                except:
+                    request_body = body_str
+            elif body_str and '=' in body_str:  # Form data
+                try:
+                    request_body = {k: v for k, v in [item.split('=') for item in body_str.split('&')]}
+                except:
+                    request_body = body_str
+            else:
+                request_body = body_str
+        except Exception as e:
+            request_body = {"error": f"Could not read request body: {str(e)}"}
+        
+        # Log request
+        from .logger import log_request_response
+        log_request_response(
+            source=client_host,
+            destination=request.url.path,
+            headers=dict(request.headers),
+            metadata={
+                "method": request.method,
+                "request_id": request_id
+            },
+            body=request_body
+        )
+        
+        # Process the request
+        start_time = time.time()
+        
+        # Create a custom response class that captures the body
+        original_response = await call_next(request)
+        process_time = time.time() - start_time
+        
+        # Create a modified response with logging
+        response_body = await self._get_response_body(original_response)
+        
+        # Log response with the body
+        log_request_response(
+            source=request.url.path,
+            destination=client_host,
+            headers=dict(original_response.headers),
+            metadata={
+                "status_code": original_response.status_code,
+                "process_time_ms": round(process_time * 1000),
+                "request_id": request_id
+            },
+            body=response_body
+        )
+        
+        # Return the original response
+        return original_response
     
-    # Log the response with all required fields
-    log_request_response(
-        source=f"{request.url.path}",
-        destination=client_host,
-        headers=dict(response.headers),
-        metadata={
-            "status_code": response.status_code,
-            "process_time_ms": round(process_time * 1000),
-            "request_id": request_id
-        },
-        body=response_body
-    )
-    
-    return response
+    async def _get_response_body(self, response):
+        """Extract the body from a response"""
+        if not hasattr(response, "body"):
+            return {}
+            
+        try:
+            # Read the response body
+            body = response.body
+            
+            # Try to parse as JSON
+            try:
+                return json.loads(body)
+            except:
+                # Return as string if not JSON
+                return body.decode('utf-8')
+        except Exception as e:
+            logger.error(f"Error capturing response body: {str(e)}")
+            return {}
+
+# Add the middleware to the app
+app.add_middleware(ResponseLoggingMiddleware)
 
 
 # Graceful shutdown handler
@@ -360,7 +386,8 @@ async def push_message(
 @app.get("/queues/{queue_name}/pull", tags=["Message Operations"])
 async def pull_message(
     queue_name: str,
-    token_data: TokenData = Depends(validate_agent_or_admin_privileges)
+    token_data: TokenData = Depends(validate_agent_or_admin_privileges),
+    request: Request = None
 ):
     """
     Pull a message from a queue
@@ -389,11 +416,15 @@ async def pull_message(
             detail=message_text
         )
     
-    return {
+    # Prepare the response body
+    response_body = {
         "message_id": pulled_message.id,
         "content": pulled_message.content,
-        "timestamp": pulled_message.timestamp
+        "timestamp": pulled_message.timestamp,
+        "message_type": pulled_message.message_type
     }
+    
+    return response_body
 
 
 # Custom exception handler for structured error responses

@@ -297,7 +297,7 @@ curl -X POST "http://localhost:7500/token?username=admin&password=admin_password
 curl -X POST "http://localhost:7500/queues" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name": "testQueue", "config": {"max_messages": 100, "persist_interval_seconds": 30}}'
+  -d '{"name": "testQueue", "config": {"max_messages": 100, "persist_interval_seconds": 30, "queue_type": "transaction"}}'
 ```
 
 #### Push a message

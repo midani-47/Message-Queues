@@ -90,40 +90,36 @@ def log_message(queue_name: str, message: Dict, action: str):
     message_type = message.get("message_type", "unknown")
     content = message.get("content", {})
     
-    # Create log entry based on message type and action
-    if message_type == "transaction":
-        log_entry = {
-            "timestamp": timestamp,
-            "service": "queue_service",
-            "action": action,
-            "queue": queue_name,
-            "message_id": message_id,
-            "transaction_id": content.get("transaction_id", "unknown"),
-            "customer_id": content.get("customer_id", "unknown"),
-            "amount": content.get("amount", 0),
-            "vendor_id": content.get("vendor_id", "unknown")
-        }
-    else:  # prediction
-        log_entry = {
-            "timestamp": timestamp,
-            "service": "queue_service",
-            "action": action,
-            "queue": queue_name,
-            "message_id": message_id,
-            "transaction_id": content.get("transaction_id", "unknown"),
-            "prediction": content.get("prediction", False),
-            "confidence": content.get("confidence", 0.0),
-            "model_version": content.get("model_version", "unknown")
-        }
+    # Create a simple log entry with all required fields
+    log_entry = {
+        "timestamp": timestamp,
+        "service": "queue_service",
+        "action": action,
+        "queue": queue_name,
+        "message_id": message_id,
+        "message_type": message_type,
+        "body": content  # Always include the full message body
+    }
+    
+    # Add type-specific fields for better readability
+    if message_type == "transaction" and isinstance(content, dict):
+        log_entry["transaction_id"] = content.get("transaction_id", "unknown")
+        log_entry["customer_id"] = content.get("customer_id", "unknown")
+        log_entry["amount"] = content.get("amount", 0)
+        log_entry["vendor_id"] = content.get("vendor_id", "unknown")
+    elif message_type == "prediction" and isinstance(content, dict):
+        log_entry["transaction_id"] = content.get("transaction_id", "unknown")
+        log_entry["prediction"] = content.get("prediction", False)
+        log_entry["confidence"] = content.get("confidence", 0.0)
+        log_entry["model_version"] = content.get("model_version", "unknown")
     
     # Log the entry to both console and file
     log_str = json.dumps(log_entry)
     logger.info(log_str)
     
-    # Also write directly to the log file to ensure it's captured
+    # Write directly to the log file in the Docker container
     try:
-        # Use a path relative to the working directory
-        with open("queue_service.log", "a") as f:
+        with open("queue_service/app/queue_service.log", "a+") as f:
             f.write(f"{log_str}\n")
     except Exception as e:
         logger.error(f"Error writing to log file: {str(e)}")
@@ -171,10 +167,9 @@ def log_request_response(
     # Log with standard logger
     logger_method(log_str)
     
-    # Also write directly to the log file to ensure it's captured
+    # Write directly to the log file in the Docker container
     try:
-        # Use a path relative to the working directory
-        with open("queue_service.log", "a") as f:
+        with open("/app/queue_service.log", "a") as f:
             f.write(f"{log_str}\n")
     except Exception as e:
         logger.error(f"Error writing to log file: {str(e)}")

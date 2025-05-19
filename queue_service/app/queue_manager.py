@@ -317,14 +317,15 @@ class QueueManager:
             self._queue_info[queue_name].message_count = len(self._queues[queue_name])
             self._queue_info[queue_name].last_modified = datetime.utcnow()
         
-        # Log the message push operation
+        # Log the message push operation with full body content
         from .logger import log_message
         log_message(
             queue_name=queue_name,
             message={
                 "id": message_id,
                 "message_type": message_type,
-                "content": content
+                "content": content,
+                "body": content  # Explicitly include body for logging
             },
             action="push"
         )
@@ -358,14 +359,15 @@ class QueueManager:
             self._queue_info[queue_name].message_count = len(self._queues[queue_name])
             self._queue_info[queue_name].last_modified = datetime.utcnow()
         
-        # Log the message pull operation
+        # Log the message pull operation with full body content
         from .logger import log_message
         log_message(
             queue_name=queue_name,
             message={
                 "id": message.id,
                 "message_type": message.message_type,
-                "content": message.content
+                "content": message.content,
+                "body": message.content  # Explicitly include body for logging
             },
             action="pull"
         )
