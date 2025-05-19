@@ -6,17 +6,15 @@ from enum import Enum
 
 class QueueRole(str, Enum):
     """Roles for queue access control"""
-    ADMIN = "admin"
-    AGENT = "agent"
-    USER = "user"
+    ADMIN = "admin"   # full access to create, delete, modify queues
+    AGENT = "agent"   # they can only push and pull from the queues
+    USER = "user"     # user doesnt have any permission
 
 
 class MessageBase(BaseModel):
     """Base model for queue messages
     
-    This model is generic to store any kind of message content:
-    
-    1. Transaction data format from Assignment 2:
+    1. Transaction data format from our last assignment:
        {
          "transaction_id": str,
          "customer_id": str,
@@ -37,7 +35,7 @@ class MessageBase(BaseModel):
          ... other prediction fields
        }
     """
-    content: Dict[str, Any]  # Content can be any valid JSON object (transaction or prediction)
+    content: Dict[str, Any]  # Content can be any valid json object (transaction or prediction)
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     message_type: str = "transaction"  # Can be "transaction" or "prediction"
 
@@ -47,7 +45,7 @@ class Message(MessageBase):
     id: str  # Unique message ID
 
 
-class QueueType(str, Enum):
+class QueueType(str, Enum):    # our intention is to have queues of 2 types (either transaction or prediction queue)
     """Types of queues"""
     TRANSACTION = "transaction"
     PREDICTION = "prediction"
@@ -55,18 +53,18 @@ class QueueType(str, Enum):
 
 class QueueConfig(BaseModel):
     """Queue configuration model"""
-    max_messages: int = 5
-    persist_interval_seconds: int = 60
+    max_messages: int = 5    # Maximum number of messages allowed in the queue
+    persist_interval_seconds: int = 60   # how long till we save queue state to disk
     queue_type: QueueType = QueueType.TRANSACTION
 
 
 class QueueInfo(BaseModel):
     """Queue information model"""
     name: str
-    message_count: int
-    queue_type: QueueType
-    created_at: datetime
-    last_modified: datetime = Field(default_factory=datetime.utcnow)
+    message_count: int      # this is number of current messages in queue
+    queue_type: QueueType   # type of queue (transaction/prediction)
+    created_at: datetime    # queue creation time
+    last_modified: datetime = Field(default_factory=datetime.utcnow)  # time last modified
 
 
 class QueueCreate(BaseModel):
@@ -88,4 +86,4 @@ class ErrorResponse(BaseModel):
 class TokenData(BaseModel):
     """Model for token data"""
     username: str
-    role: QueueRole
+    role: QueueRole   # User's role, important for permissions
