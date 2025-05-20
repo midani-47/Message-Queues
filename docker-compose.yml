@@ -7,7 +7,7 @@ services:
     ports:
       - "7500:7500"
     volumes:
-      - ./queue_data:/app/queue_data
+      - ./queue_service/queue_data:/app/queue_data
     restart: unless-stopped
     environment:
       - QUEUE_CONFIG_PATH=/app/config.json

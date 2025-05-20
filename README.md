@@ -110,9 +110,11 @@ docker-compose logs -f
 ```
 
 ```bash
-# In the assignment 3 directory
-docker-compose up --build
-Then open http://localhost:7500 in your browser to access the web UI.
+# If you encounter strange cache issues (e.g., stale builds), try:
+docker-compose down
+docker-compose build --no-cache
+docker-compose up
+# Then open http://localhost:7500 in your browser to access the web UI.
 ````
 
 ### Manual Setup
@@ -134,10 +136,45 @@ source venv/bin/activate
 # Install dependencies
 pip install -r queue_service/requirements.txt
 
-# Start the service
-cd queue_service
-python -m app.main
+
 ```
+
+## Testing the Service
+
+### Using the Web UI
+
+The easiest way to test the service is through the web UI, which is available at http://localhost:7500 after starting the service.
+
+1. **Authentication**:
+   - Log in with one of the following credentials:
+     - Admin: username `admin`, password `admin_password`
+     - Agent: username `agent`, password `agent_password`
+     - User: username `user`, password `user_password`
+
+2. **Creating Queues** (Admin only):
+   - Enter a queue name
+   - Select queue type (Transaction or Prediction)
+   - Click "Create Queue"
+
+3. **Pushing Messages** (Admin and Agent):
+   - Select a queue from the dropdown
+   - Select message type (must match the queue type)
+   - Enter message content in JSON format (examples are provided)
+   - Click "Push Message"
+
+4. **Pulling Messages** (Admin and Agent):
+   - Select a queue from the dropdown
+   - Click "Pull Message"
+
+
+### Important Notes
+
+- Queue names must be alphanumeric
+- Each queue has a maximum of 5 messages (configured in config.json)
+- Message types must match the queue type (transaction, or prediction)
+- Transaction messages require fields: transaction_id, customer_id, amount, vendor_id
+- Prediction messages require fields: transaction_id, prediction, confidence
+- The message queue service uses a maximum number of messages per queue, which is primarily configured through the global max_messages_per_queue setting in the config.json file (currently set to 5 as per requirements). This setting serves as the default for all queues in the system. The application also supports a more flexible model where individual queues can have their own limits specified during creation, allowing for queue-specific configurations if needed. To test this functionality, simply modify the max_messages_per_queue value in the configuration file before starting the service, or for individual queues, include a custom max_messages value when creating a new queue through the API.
 
 ## Service API
 
@@ -203,10 +240,5 @@ For testing purposes, the service includes three predefined users:
 └── DOCUMENTATION.md         # Detailed documentation
 ```
 
-See [DOCUMENTATION.md](DOCUMENTATION.md) for more detailed information about the implementation and usage of this service.
+Plrsdr see [DOCUMENTATION.md](DOCUMENTATION.md) for more detailed information about the implementation and usage of this service.
 
-## Common Issues
-
-- If you have permission issues with the queue_data directory, make sure the directory has proper read/write permissions
-- If authentication fails, check that you're using the correct credentials and token format
-- For any configuration issues, verify your config.json file and environment variables

@@ -1,6 +1,7 @@
 import logging
 import sys
 import json
+import os
 from datetime import datetime
 from typing import Dict, Any, Optional, Union
 
@@ -9,50 +10,46 @@ from .config import config
 
 class CustomFormatter(logging.Formatter):
     """
-    Custom log formatter that outputs logs in a structured JSON format
-    
+    Custom log formatter that outputs logs in a structured format
     Includes metadata about request/response when available
     """
     
     def format(self, record):
-        log_data = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "level": record.levelname,
-            "message": record.getMessage(),
-            "module": record.module,
-            "function": record.funcName,
-            "line": record.lineno
-        }
-        
-        # Add extra fields if available
-        if hasattr(record, "source"):
-            log_data["source"] = record.source
-        if hasattr(record, "destination"):
-            log_data["destination"] = record.destination
-        if hasattr(record, "headers"):
-            log_data["headers"] = record.headers
-        if hasattr(record, "metadata"):
-            log_data["metadata"] = record.metadata
-        if hasattr(record, "body"):
-            # Handle the case where body might be an object that needs serialization
-            try:
-                if isinstance(record.body, (dict, list)):
-                    log_data["body"] = record.body
-                else:
-                    log_data["body"] = str(record.body)
-            except:
-                log_data["body"] = str(record.body)
-        
-        # Add exception info if available
-        if record.exc_info:
-            log_data["exception"] = self.formatException(record.exc_info)
-        
-        return json.dumps(log_data)
+        # Base format similar to previous assignment
+        if hasattr(record, 'source') and hasattr(record, 'destination'):
+            # This is a request/response log
+            log_entry = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "source": record.source,
+                "destination": record.destination
+            }
+            
+            # Add headers if available
+            if hasattr(record, "headers"):
+                log_entry["headers"] = record.headers
+                
+            # Add metadata if available
+            if hasattr(record, "metadata"):
+                for key, value in record.metadata.items():
+                    log_entry[key] = value
+                    
+            # Add body if available
+            if hasattr(record, "body"):
+                log_entry["body"] = record.body
+                
+            return json.dumps(log_entry)
+        else:
+            # Regular log
+            return f"{datetime.utcnow().isoformat()} - {record.levelname} - {record.getMessage()}"
 
 
 def setup_logger():
     """Set up and configure the logger"""
     logger = logging.getLogger("queue_service")
+    
+    # Clear any existing handlers to avoid duplicates
+    if logger.handlers:
+        logger.handlers = []
     
     # Set log level from config
     log_level = config.get("log_level", "INFO")
@@ -64,11 +61,15 @@ def setup_logger():
     console_handler.setFormatter(CustomFormatter())
     logger.addHandler(console_handler)
     
-    # Create file handler
+    # Create file handler - making sure the path is correct
+    # Use the project root directory (not inside app directory)
+    log_file_path = "queue_service.log"
+    
     try:
-        file_handler = logging.FileHandler("queue_service.log")
+        file_handler = logging.FileHandler(log_file_path)
         file_handler.setFormatter(CustomFormatter())
         logger.addHandler(file_handler)
+        logger.info(f"Logging to file: {os.path.abspath(log_file_path)}")
     except Exception as e:
         logger.warning(f"Could not create log file: {str(e)}")
     
@@ -78,17 +79,51 @@ def setup_logger():
 # Create logger instance
 logger = setup_logger()
 
+
 def log_message(queue_name: str, message: Dict, action: str):
     """Log message operations to queue_service.log"""
+    # Format timestamp as used in Assignment 2
+    timestamp = datetime.utcnow().isoformat()
+    
+    # Get message content and type
+    message_id = message.get("id", "unknown")
+    message_type = message.get("message_type", "unknown")
+    content = message.get("content", {})
+    
+    # Create a simple log entry with all required fields
     log_entry = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": timestamp,
+        "service": "queue_service",
+        "action": action,
         "queue": queue_name,
-        "action": action,  # "push" or "pull"
-        "message_id": message.get("id"),
-        "message_type": message.get("message_type"),
-        "content": message.get("content")
+        "message_id": message_id,
+        "message_type": message_type,
+        "body": content  # Always include the full message body
     }
-    logger.info(json.dumps(log_entry))
+    
+    # Add type-specific fields for better readability
+    if message_type == "transaction" and isinstance(content, dict):
+        log_entry["transaction_id"] = content.get("transaction_id", "unknown")
+        log_entry["customer_id"] = content.get("customer_id", "unknown")
+        log_entry["amount"] = content.get("amount", 0)
+        log_entry["vendor_id"] = content.get("vendor_id", "unknown")
+    elif message_type == "prediction" and isinstance(content, dict):
+        log_entry["transaction_id"] = content.get("transaction_id", "unknown")
+        log_entry["prediction"] = content.get("prediction", False)
+        log_entry["confidence"] = content.get("confidence", 0.0)
+        log_entry["model_version"] = content.get("model_version", "unknown")
+    
+    # Log the entry to both console and file
+    log_str = json.dumps(log_entry)
+    logger.info(log_str)
+    
+    # Write directly to the log file in the Docker container
+    try:
+        with open("queue_service/app/queue_service.log", "a+") as f:
+            f.write(f"{log_str}\n")
+    except Exception as e:
+        logger.error(f"Error writing to log file: {str(e)}")
+
 
 def log_request_response(
     source: str,
@@ -111,7 +146,14 @@ def log_request_response(
     """
     logger_method = getattr(logger, level.lower(), logger.info)
     
-    extra = {
+    # Create a log entry with the required fields
+    log_entry = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "level": level,
+        "message": "Request/Response",
+        "module": "queue_service",
+        "function": "log_request_response",
+        "line": "N/A",
         "source": source,
         "destination": destination,
         "headers": headers or {},
@@ -119,4 +161,15 @@ def log_request_response(
         "body": body or {}
     }
     
-    logger_method("Request/Response", extra=extra)
+    # Convert to JSON string
+    log_str = json.dumps(log_entry)
+    
+    # Log with standard logger
+    logger_method(log_str)
+    
+    # Write directly to the log file in the Docker container
+    try:
+        with open("/app/queue_service.log", "a") as f:
+            f.write(f"{log_str}\n")
+    except Exception as e:
+        logger.error(f"Error writing to log file: {str(e)}")

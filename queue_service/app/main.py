@@ -1,10 +1,12 @@
 from fastapi import FastAPI, HTTPException, Depends, Request, Response, status
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 from typing import Dict, Any, Optional, List
+from starlette.responses import StreamingResponse
 import uvicorn
 import json
 import time
@@ -56,56 +58,99 @@ app.add_middleware(
 )
 
 
-# Middleware for logging requests and responses
-@app.middleware("http")
-async def log_middleware(request: Request, call_next):
-    # Generate a request ID
-    request_id = str(time.time())
-    
-    # Get client IP
-    client_host = request.client.host if request.client else "unknown"
-    
-    # Log the request
-    request_body = None
-    try:
-        request_body_bytes = await request.body()
-        if request_body_bytes:
-            request_body = json.loads(request_body_bytes)
-    except:
-        # If we can't parse the body as JSON, use the raw body
+# Custom middleware for response logging
+class ResponseLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Generate a request ID
+        request_id = str(time.time())
+        
+        # Get client IP
+        client_host = request.client.host if request.client else "unknown"
+        
+        # Capture request body
         try:
-            request_body = (await request.body()).decode("utf-8")
-        except:
-            request_body = "Could not decode request body"
+            # Store original request body
+            body_bytes = await request.body()
+            # Create a new stream with the same content
+            request._body = body_bytes
+            
+            # Try to parse body as JSON or form data
+            body_str = body_bytes.decode('utf-8') if body_bytes else ""
+            if body_str and body_str.strip().startswith('{'):
+                try:
+                    request_body = json.loads(body_str)
+                except:
+                    request_body = body_str
+            elif body_str and '=' in body_str:  # Form data
+                try:
+                    request_body = {k: v for k, v in [item.split('=') for item in body_str.split('&')]}
+                except:
+                    request_body = body_str
+            else:
+                request_body = body_str
+        except Exception as e:
+            request_body = {"error": f"Could not read request body: {str(e)}"}
+        
+        # Log request
+        from .logger import log_request_response
+        log_request_response(
+            source=client_host,
+            destination=request.url.path,
+            headers=dict(request.headers),
+            metadata={
+                "method": request.method,
+                "request_id": request_id
+            },
+            body=request_body
+        )
+        
+        # Process the request
+        start_time = time.time()
+        
+        # Create a custom response class that captures the body
+        original_response = await call_next(request)
+        process_time = time.time() - start_time
+        
+        # Create a modified response with logging
+        response_body = await self._get_response_body(original_response)
+        
+        # Log response with the body
+        log_request_response(
+            source=request.url.path,
+            destination=client_host,
+            headers=dict(original_response.headers),
+            metadata={
+                "status_code": original_response.status_code,
+                "process_time_ms": round(process_time * 1000),
+                "request_id": request_id
+            },
+            body=response_body
+        )
+        
+        # Return the original response
+        return original_response
     
-    log_request_response(
-        source=client_host,
-        destination=f"{request.url.path}",
-        headers=dict(request.headers),
-        metadata={"method": request.method, "request_id": request_id},
-        body=request_body
-    )
-    
-    # Process the request
-    start_time = time.time()
-    response = await call_next(request)
-    process_time = time.time() - start_time
-    
-    # Log the response without trying to access the body
-    # As some response types (like StreamingResponse) don't have a body attribute
-    log_request_response(
-        source=f"{request.url.path}",
-        destination=client_host,
-        headers=dict(response.headers),
-        metadata={
-            "status_code": response.status_code,
-            "process_time_ms": round(process_time * 1000),
-            "request_id": request_id
-        },
-        body="Response body not logged for this response type"
-    )
-    
-    return response
+    async def _get_response_body(self, response):
+        """Extract the body from a response"""
+        if not hasattr(response, "body"):
+            return {}
+            
+        try:
+            # Read the response body
+            body = response.body
+            
+            # Try to parse as JSON
+            try:
+                return json.loads(body)
+            except:
+                # Return as string if not JSON
+                return body.decode('utf-8')
+        except Exception as e:
+            logger.error(f"Error capturing response body: {str(e)}")
+            return {}
+
+# Add the middleware to the app
+app.add_middleware(ResponseLoggingMiddleware)
 
 
 # Graceful shutdown handler
@@ -202,13 +247,21 @@ async def create_queue(
     Create a new queue
     
     Only administrators can create queues
+    Queue type must be specified as either 'transaction' or 'prediction'
     
     Args:
-        queue_data: Queue creation data
+        queue_data: Queue creation data with queue_type
         
     Returns:
         Created queue information
     """
+    # Ensure queue config has a queue_type
+    if not queue_data.config or not hasattr(queue_data.config, 'queue_type'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Queue type must be specified (transaction or prediction)"
+        )
+    
     success, message = await queue_manager.create_queue(
         queue_data.name,
         queue_data.config
@@ -296,6 +349,8 @@ async def push_message(
     Push a message to a queue
     
     Only agents and administrators can push messages
+    Agents can only push prediction messages, not transaction messages
+    Messages must match the queue type (transaction or prediction)
     
     Args:
         queue_name: Name of the queue
@@ -305,7 +360,12 @@ async def push_message(
     Returns:
         Success message and message ID
     """
-    success, message_text, message_id = await queue_manager.push_message(queue_name, message, message_type)
+    success, message_text, message_id = await queue_manager.push_message(
+        queue_name=queue_name, 
+        content=message, 
+        message_type=message_type,
+        user_role=token_data.role
+    )
     
     if not success:
         if "does not exist" in message_text:
@@ -326,7 +386,8 @@ async def push_message(
 @app.get("/queues/{queue_name}/pull", tags=["Message Operations"])
 async def pull_message(
     queue_name: str,
-    token_data: TokenData = Depends(validate_agent_or_admin_privileges)
+    token_data: TokenData = Depends(validate_agent_or_admin_privileges),
+    request: Request = None
 ):
     """
     Pull a message from a queue
@@ -355,11 +416,15 @@ async def pull_message(
             detail=message_text
         )
     
-    return {
+    # Prepare the response body
+    response_body = {
         "message_id": pulled_message.id,
         "content": pulled_message.content,
-        "timestamp": pulled_message.timestamp
+        "timestamp": pulled_message.timestamp,
+        "message_type": pulled_message.message_type
     }
+    
+    return response_body
 
 
 # Custom exception handler for structured error responses
@@ -378,7 +443,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 # Run the server if executed directly
 if __name__ == "__main__":
     port = config.get("port", 7500)
-    host = config.get("host", "0.0.0.0")
+    host = config.get("host", "localhost")
     
     logger.info(f"Starting Queue Service on {host}:{port}")
     uvicorn.run("app.main:app", host=host, port=port, reload=True)

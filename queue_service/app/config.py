@@ -5,15 +5,15 @@ from typing import Dict, Any, Optional
 
 # Default configuration values
 DEFAULT_CONFIG = {
-    "max_messages_per_queue": 1000,
-    "persist_interval_seconds": 60,
+    "max_messages_per_queue": 1000,    # Maximum number of messages per queue
+    "persist_interval_seconds": 60,    # Time until storing queue state to disk
     "storage_path": "./queue_data",
     "port": 7500,
     "host": "localhost",
     "log_level": "INFO",
-    "jwt_secret_key": "your-secret-key-change-in-production",  # Should be changed in production
+    "jwt_secret_key": "your-secret-key-change-in-production",  # Secret for JWT auth tokens
     "jwt_algorithm": "HS256",
-    "jwt_expiration_minutes": 30
+    "jwt_expiration_minutes": 30     # Auth Token valid time
 }
 
 
@@ -21,13 +21,14 @@ class Config:
     """
     Configuration handler for the Queue Service
     
-    Reads configuration from a JSON file or uses default values.
-    Configuration file path can be set via QUEUE_CONFIG_PATH environment variable.
+    Reads configuration from JSON file or uses default values.
+    Configuration file path can be set via QUEUE_CONFIG_PATH environment variable
     """
     
     def __init__(self):
         self._config = DEFAULT_CONFIG.copy()
         self._load_config()
+
     
     def _load_config(self):
         """Load configuration from file if it exists"""
@@ -43,6 +44,7 @@ class Config:
             except Exception as e:
                 print(f"Error loading configuration: {str(e)}")
                 print("Using default configuration")
+                
     
     def get(self, key: str, default: Any = None) -> Any:
         """Get a configuration value by key"""
@@ -57,7 +59,7 @@ class Config:
         self._config[key] = value
     
     def save(self, path: Optional[str] = None) -> None:
-        """Save current configuration to file"""
+        """Saving current configuration to file"""
         if path is None:
             path = os.environ.get("QUEUE_CONFIG_PATH", "config.json")
         
@@ -69,5 +71,5 @@ class Config:
             print(f"Error saving configuration: {str(e)}")
 
 
-# Create a singleton instance
-config = Config()
+
+config = Config()  # creating gloval instance for application

@@ -72,9 +72,18 @@ class QueueManager:
                 
                 # Recreate queues from metadata
                 for queue_name, queue_data in metadata.items():
+                    # Handle existing queues that don't have queue_type
+                    # Default to transaction type for backward compatibility
+                    queue_type = queue_data.get("queue_type", "transaction")
+                    if isinstance(queue_type, str):
+                        queue_type = queue_type
+                    else:
+                        queue_type = "transaction"
+                        
                     self._queue_info[queue_name] = QueueInfo(
                         name=queue_name,
                         message_count=queue_data.get("message_count", 0),
+                        queue_type=queue_type,
                         created_at=datetime.fromisoformat(queue_data.get("created_at")),
                         last_modified=datetime.fromisoformat(queue_data.get("last_modified"))
                     )
@@ -127,7 +136,8 @@ class QueueManager:
                 "created_at": info.created_at.isoformat(),
                 "last_modified": datetime.utcnow().isoformat(),
                 "max_messages": config.max_messages,
-                "persist_interval_seconds": config.persist_interval_seconds
+                "persist_interval_seconds": config.persist_interval_seconds,
+                "queue_type": info.queue_type
             }
         
         try:
@@ -160,7 +170,7 @@ class QueueManager:
         
         Args:
             name: Name of the queue to create
-            config: Optional queue configuration
+            config: Optional queue configuration with queue_type (transaction or prediction)
             
         Returns:
             (success, message)
@@ -176,12 +186,6 @@ class QueueManager:
         # Create the queue
         self._queues[name] = deque()
         self._locks[name] = asyncio.Lock()
-        self._queue_info[name] = QueueInfo(
-            name=name,
-            message_count=0,
-            created_at=datetime.utcnow(),
-            last_modified=datetime.utcnow()
-        )
         
         # Set configuration
         if config:
@@ -190,6 +194,15 @@ class QueueManager:
             # Use the max_messages_per_queue from the config file
             max_messages = config.get("max_messages_per_queue", 5)
             self._queue_configs[name] = QueueConfig(max_messages=max_messages)
+        
+        # Create queue info with the queue type
+        self._queue_info[name] = QueueInfo(
+            name=name,
+            message_count=0,
+            queue_type=self._queue_configs[name].queue_type,
+            created_at=datetime.utcnow(),
+            last_modified=datetime.utcnow()
+        )
         
         logger.info(f"Created queue '{name}'")
         return True, f"Queue '{name}' created successfully"
@@ -237,7 +250,7 @@ class QueueManager:
         """
         return list(self._queue_info.values())
     
-    async def push_message(self, queue_name: str, content: Dict[str, Any], message_type: str = "transaction") -> Tuple[bool, str, Optional[str]]:
+    async def push_message(self, queue_name: str, content: Dict[str, Any], message_type: str = "transaction", user_role: str = "admin") -> Tuple[bool, str, Optional[str]]:
         """
         Push a message to the queue
         
@@ -245,6 +258,7 @@ class QueueManager:
             queue_name: Name of the queue
             content: Message content (either transaction data or prediction result from Assignment 2)
             message_type: Type of message - either "transaction" or "prediction"
+            user_role: Role of the user making the request (admin or agent)
             
         Returns:
             (success, message, message_id)
@@ -256,6 +270,31 @@ class QueueManager:
         # Validate message type
         if message_type not in ["transaction", "prediction"]:
             return False, f"Invalid message type: {message_type}. Must be 'transaction' or 'prediction'", None
+        
+        # Get queue type
+        queue_type = self._queue_info[queue_name].queue_type
+        
+        # Check if message type is compatible with queue type
+        if message_type == "transaction" and queue_type != "transaction":
+            return False, f"Cannot push transaction message to prediction queue '{queue_name}'", None
+        
+        if message_type == "prediction" and queue_type != "prediction":
+            return False, f"Cannot push prediction message to transaction queue '{queue_name}'", None
+        
+        # Both admins and agents can push any message type
+        # No need to check role permissions here as this is already handled by the endpoint
+        
+        # Validate message content based on type
+        if message_type == "transaction":
+            required_fields = ["transaction_id", "customer_id", "amount", "vendor_id"]
+            for field in required_fields:
+                if field not in content:
+                    return False, f"Transaction message missing required field: {field}", None
+        elif message_type == "prediction":
+            required_fields = ["transaction_id", "prediction", "confidence"]
+            for field in required_fields:
+                if field not in content:
+                    return False, f"Prediction message missing required field: {field}", None
         
         async with self._locks[queue_name]:
             # Check queue size limit
@@ -278,14 +317,15 @@ class QueueManager:
             self._queue_info[queue_name].message_count = len(self._queues[queue_name])
             self._queue_info[queue_name].last_modified = datetime.utcnow()
         
-        # Log the message push operation
+        # Log the message push operation with full body content
         from .logger import log_message
         log_message(
             queue_name=queue_name,
             message={
                 "id": message_id,
                 "message_type": message_type,
-                "content": content
+                "content": content,
+                "body": content  # Explicitly include body for logging
             },
             action="push"
         )
@@ -319,14 +359,15 @@ class QueueManager:
             self._queue_info[queue_name].message_count = len(self._queues[queue_name])
             self._queue_info[queue_name].last_modified = datetime.utcnow()
         
-        # Log the message pull operation
+        # Log the message pull operation with full body content
         from .logger import log_message
         log_message(
             queue_name=queue_name,
             message={
                 "id": message.id,
                 "message_type": message.message_type,
-                "content": message.content
+                "content": message.content,
+                "body": message.content  # Explicitly include body for logging
             },
             action="pull"
         )
